@@ -24,6 +24,11 @@
     --color-easy: var(--easy);
     --color-medium: var(--medium);
     --color-hard: var(--hard);
+    --color-rate-saw: var(--rate-saw);
+    --color-rate-again: var(--rate-again);
+    --color-rate-hard: var(--rate-hard);
+    --color-rate-good: var(--rate-good);
+    --color-rate-easy: var(--rate-easy);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -87,6 +92,11 @@
     --easy: oklch(0.55 0.14 160);
     --medium: oklch(0.62 0.15 70);
     --hard: oklch(0.56 0.2 25);
+    --rate-saw: oklch(0.52 0.2 300);
+    --rate-again: oklch(0.54 0.21 25);
+    --rate-hard: oklch(0.58 0.17 50);
+    --rate-good: oklch(0.52 0.15 150);
+    --rate-easy: oklch(0.52 0.17 255);
 }
 
 .dark {
@@ -124,6 +134,11 @@
     --easy: oklch(0.75 0.14 165);
     --medium: oklch(0.8 0.15 80);
     --hard: oklch(0.7 0.18 22);
+    --rate-saw: oklch(0.74 0.16 300);
+    --rate-again: oklch(0.7 0.19 22);
+    --rate-hard: oklch(0.78 0.15 60);
+    --rate-good: oklch(0.76 0.16 150);
+    --rate-easy: oklch(0.74 0.14 245);
 }
 
 @layer base {

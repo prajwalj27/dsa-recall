@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CHOICES } from '@/lib/choices'
 import { useMarkReviewed } from '@/lib/queries'
+import { cn } from '@/lib/utils'
 
 /**
  * Row actions for a problem with a card: mark it reviewed (a re-solve done outside LeetCode;
@@ -61,7 +62,9 @@ export function ProblemActionsMenu({
                 },
               )
             }
+            title={choice.hint}
           >
+            <span className={cn('size-2 shrink-0 rounded-full', choice.dot)} aria-hidden="true" />
             {choice.label}
           </DropdownMenuItem>
         ))}

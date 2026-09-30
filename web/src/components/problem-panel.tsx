@@ -196,6 +196,7 @@ function TimelineItem({ entry }: { entry: TimelineEntry }) {
       {entry.kind === 'solve' && entry.solve_id !== null ? (
         <div className="flex flex-col gap-1">
           <RatingButtons
+            size="xs"
             selected={entry.choice}
             disabled={rateSolve.isPending}
             onSelect={(choice) =>
