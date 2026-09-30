@@ -99,18 +99,25 @@ def test_problem_without_card(client: TestClient, seeded) -> None:
 
 def test_pause_and_resume(client: TestClient, seeded) -> None:
     paused = client.post("/api/problems/pause", json={"slugs": ["hard-one", "stuck", "nope"]})
-    assert paused.json() == {"changed": 1}  # stuck has no card, nope doesn't exist
+    assert paused.json() == {"changed": 2}  # nope doesn't exist
 
     today = client.get("/api/today").json()
     assert [i["slug"] for i in today["due"]["items"]] == ["easy-one"]
     assert today["due"]["total_due"] == 1
-    assert [p["slug"] for p in today["paused"]] == ["hard-one"]
-    assert today["paused"][0]["frontend_id"] == "410"
-    assert client.get("/api/problems/hard-one").json()["card"]["paused"] is True
+    assert today["attempted"] == []  # the paused attempted problem left its section
+    stuck, hard = today["paused"]  # most recent activity first
+    assert (stuck["slug"], stuck["solved"], stuck["recall"]) == ("stuck", False, None)
+    assert stuck["last_status"] == "Time Limit Exceeded"
+    assert (hard["slug"], hard["solved"], hard["frontend_id"]) == ("hard-one", True, "410")
+    assert 0 < hard["recall"] < 1
+    assert client.get("/api/problems/hard-one").json()["problem"]["paused"] is True
+    assert client.get("/api/problems/stuck").json()["problem"]["paused"] is True
 
-    resumed = client.post("/api/problems/resume", json={"slugs": ["hard-one"]})
-    assert resumed.json() == {"changed": 1}
-    assert client.get("/api/today").json()["paused"] == []
+    resumed = client.post("/api/problems/resume", json={"slugs": ["hard-one", "stuck"]})
+    assert resumed.json() == {"changed": 2}
+    today = client.get("/api/today").json()
+    assert today["paused"] == []
+    assert [a["slug"] for a in today["attempted"]] == ["stuck"]
 
     client.post("/api/problems/pause", json={"slugs": ["hard-one", "easy-one"]})
     assert client.post("/api/problems/resume", json={"all": True}).json() == {"changed": 2}

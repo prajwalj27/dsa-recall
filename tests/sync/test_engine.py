@@ -188,5 +188,24 @@ def test_solving_a_paused_problem_again_resumes_it(session_factory, fake) -> Non
     run_sync(session_factory, fake)
 
     with session_factory() as s:
-        assert s.get(Card, "two-sum").suspended is False
+        assert s.get(Problem, "two-sum").paused is False
         assert [p.slug for p in pending_ratings(s)] == ["two-sum"]
+
+
+def test_paused_attempted_problem_resumes_only_when_solved(session_factory, fake) -> None:
+    slug = "median-of-two-sorted-arrays"  # attempted-only in the sample data
+    run_sync(session_factory, fake)
+    with session_factory() as s, s.begin():
+        assert pause(s, [slug]) == 1
+
+    fake.add(slug, FakeSub(303, "Wrong Answer", day(61)))  # another failed attempt
+    run_sync(session_factory, fake)
+    with session_factory() as s:
+        assert s.get(Problem, slug).paused is True
+
+    fake.add(slug, FakeSub(304, "Accepted", day(62)))  # first solve
+    run_sync(session_factory, fake)
+    with session_factory() as s:
+        assert s.get(Problem, slug).paused is False
+        assert s.get(Card, slug) is not None
+        assert [p.slug for p in pending_ratings(s)] == [slug]

@@ -81,6 +81,19 @@ export type AttemptedItem = {
   last_submitted_at: string | null
 }
 
+/** A paused problem: solved (recall, last solved) or only attempted (last result). */
+export type PausedItem = {
+  slug: string
+  title: string
+  difficulty: Difficulty
+  frontend_id: string | null
+  solved: boolean
+  recall: number | null
+  last_review: string | null
+  last_status: string | null
+  last_attempt_at: string | null
+}
+
 export type StudyMode = { enabled: boolean }
 
 export type Target = {
@@ -97,7 +110,7 @@ export type Today = {
   attempted: AttemptedItem[]
   study_mode: StudyMode
   target: Target
-  paused: DueItem[] // out of the review queue; most recently solved first
+  paused: PausedItem[] // out of Today; most recent activity first
   backfill_done: boolean
 }
 
@@ -113,13 +126,13 @@ export type ProblemDetail = {
     ac_rate: number | null
     is_paid_only: boolean
     url: string
+    paused: boolean
   }
   card: {
     due: string
     recall: number
     reps: number
     lapses: number
-    paused: boolean
     last_review: string | null
   } | null
   timeline: TimelineEntry[]

@@ -148,7 +148,7 @@ Modes have no end dates; users switch between them themselves. Interview remembe
 - They stay in the queue, labeled with days overdue; recall % keeps dropping.
 - A late successful review is not wasted: FSRS pushes the next one further out.
 - Snooze delays a review a few days.
-- **Pause** takes problems out of reviews (one at a time or several at once), for example to focus on a specific problem list. A paused problem keeps its history; solving it again on LeetCode (or "Mark reviewed") resumes it automatically, scheduled from that fresh solve, and it can be resumed by hand from the Paused section on Today.
+- **Pause** takes problems off Today, one at a time or several at once (hover a row's checkbox): solved problems leave the review queue, attempted ones leave "Attempted, not yet solved". Useful to focus on a specific problem list. A paused problem keeps its history; solving it on LeetCode (or "Mark reviewed") resumes it automatically, scheduled from that fresh solve, and it can be resumed by hand from the Paused section on Today.
 - No escalating reminders; the due count simply stays visible.
 
 **Returning users**
@@ -276,10 +276,10 @@ One local SQLite file with 14 tables in four groups. Mastery, node states, and d
 
 | Table | One row per | Key columns |
 | --- | --- | --- |
-| `problems` | Problem solved or considered as a suggestion | `slug` (PK), `title`, `difficulty`, `ac_rate`, `topic_tags` (JSON), `similar_questions` (JSON), `statement`, `fetched_at` |
+| `problems` | Problem solved or considered as a suggestion | `slug` (PK), `title`, `difficulty`, `ac_rate`, `topic_tags` (JSON), `similar_questions` (JSON), `statement`, `fetched_at`, `paused` |
 | `submissions` | Submission, accepted or failed | `submission_id` (PK), `slug`, `status`, `lang`, `timestamp`, `runtime_ms`, `code`, `code_hash` |
 | `solves` | Accepted solve grouped with the failed attempts before it | `id`, `slug`, `accepted_submission_id`, `wrong_before_ac`, `accepted_at`, `rating` (1–4), `rating_inferred` |
-| `cards` | Solved problem | `slug` (PK), `due`, `stability`, `difficulty`, `reps`, `lapses`, `state`, `last_review`, `suspended` (shown as Paused) |
+| `cards` | Solved problem | `slug` (PK), `due`, `stability`, `difficulty`, `reps`, `lapses`, `state`, `last_review` |
 | `review_log` | Review event | `slug`, `solve_id`, `rating`, `reviewed_at` |
 | `skills` | Skill tree node | `id` (PK), `name`, `description`, `aliases` (JSON), `created_at`, `merged_into` |
 | `skill_edges` | Link between two nodes | `from_skill`, `to_skill`, `type` (prerequisite or related) |

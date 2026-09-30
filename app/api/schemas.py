@@ -55,6 +55,20 @@ class AttemptedItem(BaseModel):
     last_submitted_at: datetime | None
 
 
+class PausedItem(Out):
+    """A paused problem: solved (recall, last solved) or attempted (last result/attempt)."""
+
+    slug: str
+    title: str
+    difficulty: str
+    frontend_id: str | None
+    solved: bool
+    recall: float | None
+    last_review: datetime | None
+    last_status: str | None
+    last_attempt_at: datetime | None
+
+
 class StudyModeOut(BaseModel):
     enabled: bool
 
@@ -73,7 +87,7 @@ class TodayOut(BaseModel):
     attempted: list[AttemptedItem]
     study_mode: StudyModeOut
     target: TargetOut
-    paused: list[DueItem]  # most recently solved first
+    paused: list[PausedItem]  # most recent activity first
     backfill_done: bool
 
 
@@ -94,6 +108,7 @@ class ProblemOut(Out):
     ac_rate: float | None
     is_paid_only: bool
     url: str
+    paused: bool  # out of Today until resumed or solved (again)
 
 
 class CardOut(Out):
@@ -101,7 +116,6 @@ class CardOut(Out):
     recall: float
     reps: int
     lapses: int
-    paused: bool  # out of the review queue until resumed or re-solved
     last_review: datetime | None
 
 

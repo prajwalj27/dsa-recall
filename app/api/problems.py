@@ -37,7 +37,6 @@ def card_out(card: Card | None) -> CardOut | None:
         recall=recall(card),
         reps=card.reps,
         lapses=card.lapses,
-        paused=card.suspended,
         last_review=as_utc(card.last_review) if card.last_review else None,
     )
 
@@ -72,6 +71,7 @@ def problem_detail(slug: str, db: Db) -> ProblemDetailOut:
             ac_rate=problem.ac_rate,
             is_paid_only=problem.is_paid_only,
             url=leetcode_url(problem.slug),
+            paused=problem.paused,
         ),
         card=card_out(db.get(Card, slug)),
         timeline=[TimelineEntryOut.model_validate(e) for e in problem_timeline(db, slug)],

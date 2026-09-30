@@ -112,3 +112,101 @@ Implemented as planned.
   - The problem panel's Pause and Resume both work, with the paused note shown.
 - **Screenshots:** select mode, the Paused section, and the panel note at 1280 px. At 375 px, two-line rows with no horizontal scroll.
 - **Auto-resume on a real re-solve** is covered by `test_solving_a_paused_problem_again_resumes_it` (sync integration).
+
+## Part 2 — Hover checkboxes instead of a Select button (requested 2026-09-30)
+
+### Context
+
+The due table's bulk selection needed two clicks ("Select", then tick rows) and a button in the header. The user asked for checkboxes that appear when hovering a row, at its far left, with the first tick starting the same selection flow.
+
+**Decisions made:**
+
+- **Always show on touch:** devices without hover (`@media (hover: none)`) always show the checkboxes.
+- **The Paused section gets the same pattern**, for bulk resume.
+
+### Behavior
+
+- **A checkbox column at the far left** of the due and paused tables. Its space is always reserved (so rows don't shift), and the checkbox is invisible until the row is hovered or the checkbox has keyboard focus. On touch devices it's always visible.
+- **The first tick starts selection mode:**
+  - Every row's checkbox stays visible.
+  - The header shows a "select all" checkbox (for the rows currently shown).
+  - An action bar appears: "N selected · Pause selected (N) · Clear" (the Paused section's bar says "Resume selected (N)").
+  - Unticking the last box, Clear, or Esc ends selection mode.
+- **The "Select" button is removed.** Undo after bulk pause is unchanged.
+
+### Changes
+
+- `hooks/use-row-selection.ts`: selected slugs (limited to the visible rows), toggle/set-all/clear, and Esc to clear.
+- `components/row-select.tsx`: the header and row checkbox cells with the hover/focus/touch visibility rules.
+- `pages/today.tsx`: `DueList` and `PausedSection` use them; the Select button is removed.
+
+### Verification
+
+- Scripted UI on the dev DB (snapshot and restore; prod checksummed):
+  - Hovering a row reveals its checkbox (opacity changes).
+  - Ticking a row shows the bar and all the checkboxes.
+  - Pause selected, Undo, Esc clears.
+  - Resume selected in the Paused section.
+- Screenshots at 1280 px (hover state and selection mode) and 375 px (the checkboxes are shown on touch; the headless check uses a `hover: none` emulation note).
+
+### Outcome of Part 2 (implemented 2026-09-30)
+
+Implemented as described.
+
+- **New:** `hooks/use-row-selection.ts` (selection limited to the visible rows, Esc clears) and `components/row-select.tsx` (`SelectHead`, `SelectCell`, `SelectionBar`).
+- **Changed:** `DueList` and `PausedSection` in `pages/today.tsx` use them; the Select button is gone. The reveal rule is `opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100` until a selection starts, after which all the checkboxes stay visible.
+- **Checks:** `tsc`, `oxlint`, 28 Vitest tests, and the build are clean; no backend changes.
+
+**Verified on the dev DB** (:8778, bind confirmed; prod checksummed: unchanged). The UI was scripted:
+
+- There's no Select button, and the row checkbox's opacity is 0 when idle and 1 with keyboard focus.
+- Ticking one row shows the bar, makes the other checkboxes visible, and puts a select-all checkbox in the header. Esc clears it.
+- "Pause selected (3)" took due from 85 to 82.
+- In the Paused section, "Resume selected (2)" worked.
+- Screenshot of selection mode at 1280 px.
+
+**Not verified:** actual mouse hover and touch devices, since headless Chrome can't emulate `:hover` or `hover: none` from a page script. Both use the same class rules as the focus reveal, which was verified.
+
+**Incident:** the test page started with "Resume all", which un-paused the 28 problems the user had paused in dev. The dev pause state was snapshotted beforehand and restored exactly (28 paused, matching the snapshot). The test rule now forbids "normalizing" dev state.
+
+## Part 3 — Pause attempted problems too (implemented 2026-09-30)
+
+**Request:** the "Attempted, not yet solved" rows get the same hover checkboxes, to move them into Paused.
+
+**Decision:** a paused attempted problem resumes only when it's **solved**. Its first accepted submission turns it into a normal solved problem (card, "Rate your new solves"). Further failed attempts keep it paused.
+
+**Also in this part:** the user removed "Pause reviews" from the ⋯ row menu. Pausing is now done with the row checkboxes and the problem panel. The leftovers (`showPause`, the unused imports) were cleaned up.
+
+### Changes
+
+- **Migration `0004`:** `problems.paused` replaces `cards.suspended`. Existing paused cards become paused problems, and the column is dropped from `cards`. Attempted problems have no card, so the flag had to move to the problem.
+- **Engine:**
+  - `pause` / `resume` / `resume_all` act on problems, so attempted-only problems count now.
+  - `due_reviews` filters on `Problem.paused`.
+  - `paused_problems` returns a `PausedProblem` (`solved`, plus recall and last solved, or last result and last attempt), most recent activity first.
+  - Auto-resume is unchanged: a non-history solve, or "Mark reviewed".
+- **API:** `GET /api/today`: `attempted` excludes paused problems, and `paused` is a `PausedItem` list. `paused` moved from `card` to `problem` in the problem detail.
+- **UI:**
+  - The Attempted table has hover checkboxes and "Pause selected (N)".
+  - The Paused section shows attempted problems with ○ and their last result in place of the recall bar ("Recall / last result", "Last activity").
+  - The problem panel's Pause/Resume works for any problem, with a note specific to attempted problems.
+- **Design doc:** the data model (`problems.paused`) and the Pause description are updated.
+
+### Tests
+
+- 138 backend (new: attempted pause and its fields, a first solve resumes an attempted problem, a failed attempt keeps it paused (sync), migration 0004 copies the flags and drops the column, and the API's attempted/paused lists) and 28 frontend. `ruff`, `tsc`, and `oxlint` are clean.
+
+### Verified on the dev DB
+
+Test server on :8779, bind confirmed. The user's own servers on :8000/:5173 were left alone. The user's `--reload` server had already applied 0004 to dev, and the user's 28 paused problems carried over exactly (compared to the previous snapshot). Only `arranging-coins` was touched, and every step returned to 3 attempted / 28 paused:
+
+- Its checkbox is invisible when idle. "Pause selected (1)" moved it into Paused as attempted, last result Wrong Answer. Undo put it back.
+- Panel pause showed the attempted note; panel Resume worked.
+- The Paused section's per-row Resume worked.
+- Screenshot of the Paused section with the attempted row.
+
+Dev matched its snapshot afterwards, and prod was checksummed: unchanged. **Prod is still on schema 0003.** It migrates to 0004, after an automatic backup to `data/backups/`, the next time `dsa-recall` starts.
+
+**Follow-up:** the ○ status column was removed from "Attempted, not yet solved". Every row there is attempted, and next to the new checkbox it read like a second, broken checkbox. The ○ stays in the Paused section, where it marks attempted rows among solved ones.
+
+**Follow-up:** in the Paused section, the ○ icon is also gone. The "Recall / last result" column is now **"Status"**: solved rows show their recall bar, and unsolved rows show **"Unsolved"** (also on the narrow-screen second line). The last result was dropped from this column; it's still in the problem panel. "Not attempted" was avoided because these problems *were* attempted, just never solved.

@@ -6,6 +6,7 @@ from app.api.schemas import (
     AttemptedItem,
     DueItem,
     DueSection,
+    PausedItem,
     PendingItem,
     StudyModeOut,
     TargetOut,
@@ -44,7 +45,7 @@ def today(db: Db) -> TodayOut:
         attempted=_attempted(db),
         study_mode=StudyModeOut(enabled=study.enabled),
         target=TargetOut.model_validate(target),
-        paused=[DueItem.model_validate(p) for p in paused_problems(db, now)],
+        paused=[PausedItem.model_validate(p) for p in paused_problems(db, now)],
         backfill_done=bool(get_state(db, "backfill_done", False)),
     )
     db.commit()
@@ -52,10 +53,10 @@ def today(db: Db) -> TodayOut:
 
 
 def _attempted(db: Db) -> list[AttemptedItem]:
-    """Problems submitted to but never accepted, most recent first."""
+    """Problems submitted to but never accepted (and not paused), most recent first."""
     problems = db.scalars(
         select(Problem)
-        .where(Problem.question_status == "ATTEMPTED")
+        .where(Problem.question_status == "ATTEMPTED", Problem.paused.is_(False))
         .order_by(Problem.last_submitted_at.desc())
     ).all()
     items = []

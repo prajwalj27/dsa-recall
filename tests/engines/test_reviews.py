@@ -5,7 +5,7 @@ import pytest
 from fsrs import Rating
 from sqlalchemy import func, select
 
-from app.db.models import Card, ReviewLog, Solve
+from app.db.models import Card, Problem, ReviewLog, Solve
 from app.engines.reviews import (
     HISTORY,
     USER,
@@ -190,7 +190,7 @@ def test_due_reviews_excludes_not_due_and_suspended(session) -> None:
     add_solve(session, "not-due", NOW - timedelta(hours=2))
     add_solve(session, "suspended", NOW - timedelta(days=90))
     schedule_new_solves(session, NOW)
-    session.get(Card, "suspended").suspended = True
+    session.get(Problem, "suspended").paused = True
 
     items = due_reviews(session, NOW)
 

@@ -97,21 +97,18 @@ function PanelBody({ detail }: { detail: ProblemDetail }) {
           <h3 id="review-heading" className="font-medium">
             Review
           </h3>
-          {card ? (
-            <div className="flex flex-wrap justify-end gap-2">
-              <PauseToggle slug={problem.slug} title={problem.title} paused={card.paused} />
-              <ProblemActionsMenu
-                slug={problem.slug}
-                title={problem.title}
-                trigger="button"
-                showPause={false}
-              />
-            </div>
-          ) : null}
+          <div className="flex flex-wrap justify-end gap-2">
+            <PauseToggle slug={problem.slug} title={problem.title} paused={problem.paused} />
+            {card ? (
+              <ProblemActionsMenu slug={problem.slug} title={problem.title} trigger="button" />
+            ) : null}
+          </div>
         </div>
-        {card?.paused ? (
+        {problem.paused ? (
           <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-            Paused: not in your review queue. Solving it again resumes it.
+            {card
+              ? 'Paused: not in your review queue. Solving it again resumes it.'
+              : 'Paused: hidden from "Attempted, not yet solved". Solving it resumes it.'}
           </p>
         ) : null}
         {card ? (

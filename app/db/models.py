@@ -43,6 +43,9 @@ class Problem(Base):
     last_submitted_at: Mapped[datetime | None]
     num_submitted: Mapped[int | None]
 
+    # Paused: out of review and "Attempted, not yet solved" until resumed or solved (again).
+    paused: Mapped[bool] = mapped_column(default=False, server_default="0")
+
 
 class Submission(Base):
     """One LeetCode submission, accepted or failed."""
@@ -96,7 +99,6 @@ class Card(Base):
     lapses: Mapped[int] = mapped_column(default=0)
     state: Mapped[int] = mapped_column(default=1)  # fsrs.State value
     last_review: Mapped[datetime | None]
-    suspended: Mapped[bool] = mapped_column(default=False)
 
 
 class ReviewLog(Base):

@@ -117,7 +117,7 @@ def rebuild_card(session: Session, slug: str, scheduler: Scheduler | None = None
 
     result = replay(scheduler, [(r.rating, r.reviewed_at) for r in reviews])
     if card is None:
-        card = Card(slug=slug, suspended=False)
+        card = Card(slug=slug)
         session.add(card)
     card.due = utc_naive(result.card.due)
     card.stability = result.card.stability
@@ -247,25 +247,26 @@ def mark_reviewed(
 
 
 # --- Paused problems ---------------------------------------------------------------------------
-# Paused cards (stored as `cards.suspended`) stay out of the due queue until the user resumes
-# them or solves the problem again. History and scheduling are untouched.
+# Paused problems (`problems.paused`) stay out of the due queue and out of "Attempted, not yet
+# solved" until the user resumes them or solves the problem (again). History and scheduling
+# are untouched.
 
 
 def _set_paused(session: Session, slugs: Iterable[str], paused: bool) -> int:
     slugs = set(slugs)
     if not slugs:
         return 0
-    cards = session.scalars(
-        select(Card).where(Card.slug.in_(slugs), Card.suspended.is_(not paused))
+    problems = session.scalars(
+        select(Problem).where(Problem.slug.in_(slugs), Problem.paused.is_(not paused))
     ).all()
-    for card in cards:
-        card.suspended = paused
+    for problem in problems:
+        problem.paused = paused
     session.flush()
-    return len(cards)
+    return len(problems)
 
 
 def pause(session: Session, slugs: Iterable[str]) -> int:
-    """Take problems out of the review queue. Returns how many changed (card-less are ignored)."""
+    """Take problems (solved or attempted) out of Today. Returns how many changed."""
     return _set_paused(session, slugs, True)
 
 
@@ -274,7 +275,7 @@ def resume(session: Session, slugs: Iterable[str]) -> int:
 
 
 def resume_all(session: Session) -> int:
-    return resume(session, session.scalars(select(Card.slug).where(Card.suspended.is_(True))))
+    return resume(session, session.scalars(select(Problem.slug).where(Problem.paused.is_(True))))
 
 
 # --- Queries for the UI ----------------------------------------------------------------------
@@ -348,16 +349,69 @@ def due_reviews(
 ) -> list[DueReview]:
     """Cards due now (not paused), highest priority first."""
     now = now or utc_now()
-    items = _review_items(session, now, Card.suspended.is_(False), Card.due <= utc_naive(now))
+    items = _review_items(session, now, Problem.paused.is_(False), Card.due <= utc_naive(now))
     items.sort(key=lambda item: (-item.priority, item.slug))
     return items[:limit] if limit is not None else items
 
 
-def paused_problems(session: Session, now: datetime | None = None) -> list[DueReview]:
-    """Paused cards, most recently solved first."""
-    items = _review_items(session, now or utc_now(), Card.suspended.is_(True))
+@dataclass(frozen=True)
+class PausedProblem:
+    """A paused problem: solved (with recall) or only attempted (with its last result)."""
+
+    slug: str
+    title: str
+    difficulty: str
+    frontend_id: str | None
+    solved: bool
+    recall: float | None = None  # solved only
+    last_review: datetime | None = None  # solved only: last solved
+    last_status: str | None = None  # attempted only: last submission's result
+    last_attempt_at: datetime | None = None  # attempted only
+
+
+def paused_problems(session: Session, now: datetime | None = None) -> list[PausedProblem]:
+    """Paused problems, most recent activity first."""
+    now = now or utc_now()
+    scheduler = make_scheduler(desired_retention(session))
+    rows = session.execute(
+        select(Problem, Card)
+        .outerjoin(Card, Card.slug == Problem.slug)
+        .where(Problem.paused.is_(True))
+    ).all()
+    items = []
+    for problem, card in rows:
+        common = {
+            "slug": problem.slug,
+            "title": problem.title,
+            "difficulty": problem.difficulty,
+            "frontend_id": problem.frontend_id,
+        }
+        if card is not None:
+            items.append(
+                PausedProblem(
+                    **common,
+                    solved=True,
+                    recall=recall(card, now, scheduler),
+                    last_review=as_utc(card.last_review) if card.last_review else None,
+                )
+            )
+        else:
+            last = session.scalar(
+                select(Submission)
+                .where(Submission.slug == problem.slug)
+                .order_by(Submission.timestamp.desc())
+                .limit(1)
+            )
+            items.append(
+                PausedProblem(
+                    **common,
+                    solved=False,
+                    last_status=last.status if last else None,
+                    last_attempt_at=as_utc(last.timestamp) if last else None,
+                )
+            )
     epoch = datetime.min.replace(tzinfo=UTC)
-    items.sort(key=lambda item: (item.last_review or epoch, item.slug), reverse=True)
+    items.sort(key=lambda i: (i.last_review or i.last_attempt_at or epoch, i.slug), reverse=True)
     return items
 
 
