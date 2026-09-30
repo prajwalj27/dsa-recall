@@ -1,0 +1,4 @@
+{"data": {"questionSubmissionList": {"lastKey": null, "hasNext": true, "submissions": [
+  {"id": "3003", "titleSlug": "two-sum", "status": 10, "statusDisplay": "Accepted", "lang": "python3", "runtime": "39 ms", "timestamp": "1790370665"},
+  {"id": "3002", "titleSlug": "two-sum", "status": 15, "statusDisplay": "Runtime Error", "lang": "python3", "runtime": "N/A", "timestamp": "1790370600"}
+]}}}

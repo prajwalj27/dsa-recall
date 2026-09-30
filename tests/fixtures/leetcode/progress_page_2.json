@@ -1,0 +1,5 @@
+{"data": {"userProgressQuestionList": {"totalNum": 3, "questions": [
+  {"frontendId": "1", "title": "Two Sum", "titleSlug": "two-sum", "difficulty": "EASY",
+   "lastSubmittedAt": "2021-12-23T12:09:18+00:00", "numSubmitted": 2, "questionStatus": "SOLVED", "lastResult": "AC",
+   "topicTags": [{"name": "Array", "slug": "array"}, {"name": "Hash Table", "slug": "hash-table"}]}
+]}}}

@@ -1,0 +1,3 @@
+{"data": {"submissionDetails": {"runtime": 39, "memory": 36600000, "code": "class Solution:\n    pass\n",
+  "timestamp": 1790370665, "statusCode": 10, "lang": {"name": "python3", "verboseName": "Python3"},
+  "question": {"questionId": "1", "titleSlug": "two-sum"}}}}

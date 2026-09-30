@@ -364,3 +364,4 @@ The main risk is LeetCode changing its undocumented API; all LeetCode code lives
 
 - Manual "save for later" list: paste a LeetCode link to track a problem you haven't started, e.g., while working through a playlist.
 - Live desktop notifications: a standalone script opens the SQLite file read-only every few minutes, finds cards whose due time has passed, and sends one native notification when reviews become due (via `desktop-notifier`). It runs at login or once a day via Task Scheduler, and keeps a small state file so it doesn't repeat itself. Optionally it runs a quick incremental sync first, so problems re-solved since the last sync aren't reported as due.
+- Premium problems: fetch statements for paid-only problems when the user has LeetCode Premium. Until then, paid-only problems are stored with metadata (title, difficulty, tags) but no statement, and problem analysis works from tags and title only.

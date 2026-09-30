@@ -1,0 +1,5 @@
+{"data": {"question": {"questionId": "1036", "questionFrontendId": "994", "title": "Rotting Oranges",
+  "titleSlug": "rotting-oranges", "content": "<p>You are given an <code>m x n</code> grid...</p>",
+  "difficulty": "Medium", "isPaidOnly": false, "acRate": 59.50145243421835,
+  "similarQuestions": "[{\"title\": \"Walls and Gates\", \"titleSlug\": \"walls-and-gates\", \"difficulty\": \"Medium\", \"translatedTitle\": null}]",
+  "topicTags": [{"name": "Array", "slug": "array"}, {"name": "Matrix", "slug": "matrix"}]}}}

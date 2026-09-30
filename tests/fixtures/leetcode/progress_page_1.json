@@ -1,0 +1,8 @@
+{"data": {"userProgressQuestionList": {"totalNum": 3, "questions": [
+  {"frontendId": "994", "title": "Rotting Oranges", "titleSlug": "rotting-oranges", "difficulty": "MEDIUM",
+   "lastSubmittedAt": "2026-09-27T21:34:09+00:00", "numSubmitted": 1, "questionStatus": "SOLVED", "lastResult": "AC",
+   "topicTags": [{"name": "Array", "slug": "array"}, {"name": "Breadth-First Search", "slug": "breadth-first-search"}]},
+  {"frontendId": "4", "title": "Median of Two Sorted Arrays", "titleSlug": "median-of-two-sorted-arrays", "difficulty": "HARD",
+   "lastSubmittedAt": "2026-09-26T10:00:00+00:00", "numSubmitted": 3, "questionStatus": "ATTEMPTED", "lastResult": "TLE",
+   "topicTags": [{"name": "Binary Search", "slug": "binary-search"}]}
+]}}}
