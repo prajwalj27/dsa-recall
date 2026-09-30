@@ -1,7 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { DifficultyBadge } from '@/components/difficulty-badge'
+import { DifficultyText } from '@/components/difficulty-text'
 import { MarkReviewedMenu } from '@/components/mark-reviewed-menu'
 import { RatingButtons } from '@/components/rating-buttons'
 import { RelativeTime } from '@/components/relative-time'
@@ -65,7 +65,7 @@ function PanelBody({ detail }: { detail: ProblemDetail }) {
         </SheetTitle>
         <SheetDescription asChild>
           <div className="flex flex-wrap items-center gap-2">
-            <DifficultyBadge difficulty={problem.difficulty} />
+            <DifficultyText difficulty={problem.difficulty} />
             {problem.is_paid_only ? <Badge variant="secondary">Premium</Badge> : null}
             {problem.ac_rate !== null ? (
               <span>{problem.ac_rate.toFixed(1)}% acceptance</span>

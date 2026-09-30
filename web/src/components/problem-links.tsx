@@ -2,17 +2,33 @@ import { ExternalLink } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { useProblemPanel } from '@/hooks/use-problem-panel'
+import { cn } from '@/lib/utils'
 
-/** A problem title that opens the detail panel. */
-export function ProblemTitle({ slug, title }: { slug: string; title: string }) {
+/** "410. Split Array Largest Sum": opens the detail panel. Truncates, full title on hover. */
+export function ProblemTitle({
+  slug,
+  title,
+  frontendId,
+  className,
+}: {
+  slug: string
+  title: string
+  frontendId?: string | null
+  className?: string
+}) {
   const { open } = useProblemPanel()
+  const label = frontendId ? `${frontendId}. ${title}` : title
   return (
     <button
       type="button"
       onClick={() => open(slug)}
-      className="truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+      title={label}
+      className={cn(
+        'block max-w-full truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none',
+        className,
+      )}
     >
-      {title}
+      {label}
     </button>
   )
 }
@@ -22,9 +38,17 @@ function leetcodeUrl(slug: string): string {
 }
 
 /** Icon button that opens the problem on leetcode.com in a new tab. */
-export function LeetCodeLink({ slug, title }: { slug: string; title: string }) {
+export function LeetCodeLink({
+  slug,
+  title,
+  className,
+}: {
+  slug: string
+  title: string
+  className?: string
+}) {
   return (
-    <Button asChild variant="ghost" size="icon-sm">
+    <Button asChild variant="ghost" size="icon-sm" className={cn(className)}>
       <a
         href={leetcodeUrl(slug)}
         target="_blank"

@@ -287,6 +287,8 @@ class DueReview:
     due: datetime
     recall: float
     priority: float
+    frontend_id: str | None = None  # LeetCode's problem number
+    last_review: datetime | None = None  # last solved (re-solve or manual review)
 
 
 def due_reviews(
@@ -296,12 +298,12 @@ def due_reviews(
     now = now or utc_now()
     scheduler = make_scheduler(desired_retention(session))
     rows = session.execute(
-        select(Card, Problem.title, Problem.difficulty)
+        select(Card, Problem.title, Problem.difficulty, Problem.frontend_id)
         .join(Problem, Problem.slug == Card.slug)
         .where(Card.suspended.is_(False), Card.due <= utc_naive(now))
     ).all()
     items = []
-    for card, title, difficulty in rows:
+    for card, title, difficulty, frontend_id in rows:
         r = recall(card, now, scheduler)
         items.append(
             DueReview(
@@ -311,6 +313,8 @@ def due_reviews(
                 due=as_utc(card.due),
                 recall=r,
                 priority=priority(r, difficulty),
+                frontend_id=frontend_id,
+                last_review=as_utc(card.last_review) if card.last_review else None,
             )
         )
     items.sort(key=lambda item: (-item.priority, item.slug))
@@ -424,12 +428,13 @@ class PendingRating:
     accepted_at: datetime
     wrong_before_ac: int
     default: Choice | None  # pre-selected in "Rate your new solves"
+    frontend_id: str | None = None
 
 
 def pending_ratings(session: Session) -> list[PendingRating]:
     """Solves found by recent syncs, awaiting the user's rating (newest first)."""
     rows = session.execute(
-        select(Solve, Problem.title, Problem.difficulty)
+        select(Solve, Problem.title, Problem.difficulty, Problem.frontend_id)
         .join(Problem, Problem.slug == Solve.slug)
         .where(Solve.rating_source == INFERRED)
         .order_by(Solve.accepted_at.desc())
@@ -443,6 +448,7 @@ def pending_ratings(session: Session) -> list[PendingRating]:
             accepted_at=as_utc(solve.accepted_at),
             wrong_before_ac=solve.wrong_before_ac,
             default=choice_of(solve),
+            frontend_id=frontend_id,
         )
-        for solve, title, difficulty in rows
+        for solve, title, difficulty, frontend_id in rows
     ]

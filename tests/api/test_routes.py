@@ -26,6 +26,8 @@ def seeded(client: TestClient, session_factory) -> dict[str, int]:
         stuck = s.get(Problem, "stuck")
         stuck.question_status = "ATTEMPTED"
         stuck.last_submitted_at = utc_naive(now - timedelta(days=2))
+        stuck.frontend_id = "4"
+        s.get(Problem, "hard-one").frontend_id = "410"
         set_state(s, "backfill_done", True)
         schedule_new_solves(s, now)
         return {"pending": pending.id}
@@ -40,8 +42,15 @@ def test_today(client: TestClient, seeded) -> None:
     assert [i["slug"] for i in due["items"]] == ["hard-one", "easy-one"]
     assert (due["total_due"], due["shown"], due["done_today"], due["target"]) == (2, 2, 0, 8)
     assert due["items"][0]["due"].endswith("Z")
+    assert due["items"][0]["last_review"].endswith("Z")
+    assert due["items"][0]["frontend_id"] == "410"
+    assert today["pending"][0]["frontend_id"] is None
     [stuck] = today["attempted"]
-    assert (stuck["slug"], stuck["last_status"]) == ("stuck", "Time Limit Exceeded")
+    assert (stuck["slug"], stuck["last_status"], stuck["frontend_id"]) == (
+        "stuck",
+        "Time Limit Exceeded",
+        "4",
+    )
     assert today["target"]["mode"] == "steady"
     assert today["study_mode"] == {"enabled": False, "until": None, "active": False}
     assert today["backfill_done"] is True

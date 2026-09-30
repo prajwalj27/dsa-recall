@@ -17,17 +17,24 @@ export function MarkReviewedMenu({
   slug,
   title,
   trigger = 'icon',
+  className,
 }: {
   slug: string
   title: string
   trigger?: 'icon' | 'button'
+  className?: string
 }) {
   const markReviewed = useMarkReviewed()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         {trigger === 'icon' ? (
-          <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${title}`}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Actions for ${title}`}
+            className={className}
+          >
             <MoreHorizontal />
           </Button>
         ) : (

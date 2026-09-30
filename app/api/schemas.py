@@ -24,6 +24,7 @@ class PendingItem(Out):
     accepted_at: datetime
     wrong_before_ac: int
     default: Choice | None
+    frontend_id: str | None
 
 
 class DueItem(Out):
@@ -33,6 +34,8 @@ class DueItem(Out):
     due: datetime
     recall: float
     priority: float
+    frontend_id: str | None
+    last_review: datetime | None  # last solved: latest re-solve or manual review
 
 
 class DueSection(BaseModel):
@@ -47,6 +50,7 @@ class AttemptedItem(BaseModel):
     slug: str
     title: str
     difficulty: str
+    frontend_id: str | None
     last_status: str | None
     last_submitted_at: datetime | None
 

@@ -67,6 +67,7 @@ def _attempted(db: Db) -> list[AttemptedItem]:
                 slug=problem.slug,
                 title=problem.title,
                 difficulty=problem.difficulty,
+                frontend_id=problem.frontend_id,
                 last_status=last.status if last else None,
                 last_submitted_at=as_utc(last.timestamp) if last else None,
             )

@@ -59,9 +59,16 @@ export function TargetControl({ target }: { target: Target }) {
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`Daily target: ${MODE_LABEL[target.mode]}, ${target.daily_target} reviews a day`}
+        >
           <TargetIcon />
-          Daily target · {MODE_LABEL[target.mode]} · {target.daily_target}
+          <span className="sm:hidden">{target.daily_target}/day</span>
+          <span className="hidden sm:inline">
+            Daily target · {MODE_LABEL[target.mode]} · {target.daily_target}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="flex w-80 flex-col gap-4">

@@ -50,6 +50,7 @@ export type PendingItem = {
   accepted_at: string
   wrong_before_ac: number
   default: Choice | null
+  frontend_id: string | null
 }
 
 export type DueItem = {
@@ -59,6 +60,8 @@ export type DueItem = {
   due: string
   recall: number
   priority: number
+  frontend_id: string | null
+  last_review: string | null
 }
 
 export type DueSection = {
@@ -73,6 +76,7 @@ export type AttemptedItem = {
   slug: string
   title: string
   difficulty: Difficulty
+  frontend_id: string | null
   last_status: string | null
   last_submitted_at: string | null
 }
