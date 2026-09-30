@@ -91,6 +91,24 @@ class TodayOut(BaseModel):
     backfill_done: bool
 
 
+# --- Solved page ------------------------------------------------------------------------------
+
+
+class SolvedRow(Out):
+    slug: str
+    title: str
+    difficulty: str
+    frontend_id: str | None
+    tags: list[str]
+    solves: int
+    status: Literal["due", "scheduled", "paused", "unsolved"]
+    paused: bool
+    last_solved: datetime | None
+    next_review: datetime | None  # none while paused or unsolved
+    recall: float | None
+    last_activity: datetime | None
+
+
 # --- Problem detail ---------------------------------------------------------------------------
 
 

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import type { SyncStatus } from '@/lib/api'
-import { keys, useStartSync, useSyncStatus } from '@/lib/queries'
+import { invalidateReviewData, useStartSync, useSyncStatus } from '@/lib/queries'
 import { SYNC_ERRORS, syncProgressLabel } from '@/lib/sync'
 
 // Module-level so React StrictMode's double-mounted effects can't sync twice.
@@ -33,8 +33,7 @@ export function SyncControl() {
   useEffect(() => {
     const state = status?.state
     if (previousState.current === 'running' && state && state !== 'running') {
-      void client.invalidateQueries({ queryKey: keys.today })
-      void client.invalidateQueries({ queryKey: ['problem'] })
+      invalidateReviewData(client)
       if (state === 'failed' && status.error_kind) {
         const detail = status.error_kind === 'other' ? ` ${status.error ?? ''}` : ''
         toast.error(SYNC_ERRORS[status.error_kind] + detail)

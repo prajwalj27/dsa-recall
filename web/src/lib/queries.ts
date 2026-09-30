@@ -4,6 +4,7 @@ import { type Choice, endpoints, type TargetMode } from '@/lib/api'
 
 export const keys = {
   today: ['today'] as const,
+  solved: ['solved'] as const,
   problem: (slug: string) => ['problem', slug] as const,
   sync: ['sync'] as const,
   health: ['health'] as const,
@@ -16,6 +17,10 @@ export function useHealth() {
 
 export function useToday() {
   return useQuery({ queryKey: keys.today, queryFn: endpoints.today })
+}
+
+export function useSolved() {
+  return useQuery({ queryKey: keys.solved, queryFn: endpoints.solved })
 }
 
 export function useProblem(slug: string | null) {
@@ -35,13 +40,16 @@ export function useSyncStatus() {
   })
 }
 
-/** Anything that changes reviews refreshes Today and any open problem panel. */
+/** Anything that changes reviews refreshes Today, the Solved list, and any open panel. */
+export function invalidateReviewData(client: ReturnType<typeof useQueryClient>) {
+  void client.invalidateQueries({ queryKey: keys.today })
+  void client.invalidateQueries({ queryKey: keys.solved })
+  void client.invalidateQueries({ queryKey: ['problem'] })
+}
+
 function useInvalidateReviews() {
   const client = useQueryClient()
-  return () => {
-    void client.invalidateQueries({ queryKey: keys.today })
-    void client.invalidateQueries({ queryKey: ['problem'] })
-  }
+  return () => invalidateReviewData(client)
 }
 
 export function useStartSync() {

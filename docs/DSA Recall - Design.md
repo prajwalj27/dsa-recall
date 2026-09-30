@@ -226,7 +226,7 @@ Five pages in a sidebar, plus a problem detail panel that opens from any page. T
 | --- | --- | --- |
 | Today (home) | What to do now | Rate your new solves; Due for review (up to the daily target); Attempted, not yet solved; Suggested (not counted toward the target) |
 | Skill tree | Where the user stands | Full-screen brain map; node side panel |
-| Solved | Full record | Sortable, filterable table: problem, difficulty, skills, times solved, last solved, next review, status (learning, reviewing, mastered) |
+| Solved | Full record | Sortable, filterable table of every problem submitted to: problem, difficulty, skills (LeetCode topic tags until skills exist), times solved, last solved, next review, recall, status (due, scheduled, paused, unsolved; mastered once mastery exists). Search, status and difficulty and tag filters, bulk pause/resume; a problem opens its detail panel |
 | Insights | Trends | Solves and reviews per week, retention rate, most common mistake types, weekly LLM summary |
 | Settings | Setup | LeetCode connection status, LLM provider and model per task, daily target mode (Casual, Steady, Interview), notifications, manual resync, export data |
 

@@ -124,6 +124,17 @@ def test_pause_and_resume(client: TestClient, seeded) -> None:
     assert client.get("/api/today").json()["due"]["total_due"] == 2
 
 
+def test_solved_list(client: TestClient, seeded) -> None:
+    rows = {row["slug"]: row for row in client.get("/api/solved").json()}
+
+    # fresh/hard-one/easy-one have no question_status in the seed; only "stuck" is marked touched
+    assert set(rows) == {"stuck"}
+    stuck = rows["stuck"]
+    assert (stuck["status"], stuck["solves"], stuck["next_review"]) == ("unsolved", 0, None)
+    assert stuck["frontend_id"] == "4"
+    assert stuck["last_activity"].endswith("Z")
+
+
 def test_target_and_study_mode(client: TestClient, seeded) -> None:
     target = client.put("/api/settings/target", json={"mode": "interview"}).json()
     assert (target["mode"], target["daily_target"], target["retention"]) == ("interview", 15, 0.95)

@@ -415,6 +415,74 @@ def paused_problems(session: Session, now: datetime | None = None) -> list[Pause
     return items
 
 
+# --- Solved page -------------------------------------------------------------------------------
+
+ProblemStatus = Literal["due", "scheduled", "paused", "unsolved"]
+
+
+@dataclass(frozen=True)
+class ProblemRow:
+    """One problem the user has submitted to, for the Solved page."""
+
+    slug: str
+    title: str
+    difficulty: str
+    frontend_id: str | None
+    tags: tuple[str, ...]
+    solves: int
+    status: ProblemStatus
+    paused: bool
+    last_solved: datetime | None = None  # latest re-solve or manual review
+    next_review: datetime | None = None  # none while paused or unsolved
+    recall: float | None = None  # solved only
+    last_activity: datetime | None = None  # latest submission
+
+
+def problem_status(problem: Problem, card: Card | None, now: datetime) -> ProblemStatus:
+    if problem.paused:
+        return "paused"
+    if card is None:
+        return "unsolved"
+    return "due" if as_utc(card.due) <= now else "scheduled"
+
+
+def solved_list(session: Session, now: datetime | None = None) -> list[ProblemRow]:
+    """Every problem submitted to (solved or attempted), soonest next review first."""
+    now = now or utc_now()
+    scheduler = make_scheduler(desired_retention(session))
+    solves = dict(session.execute(select(Solve.slug, func.count()).group_by(Solve.slug)).all())
+    rows = session.execute(
+        select(Problem, Card)
+        .outerjoin(Card, Card.slug == Problem.slug)
+        .where(Problem.question_status.is_not(None))
+    ).all()
+
+    items = []
+    for problem, card in rows:
+        status = problem_status(problem, card, now)
+        items.append(
+            ProblemRow(
+                slug=problem.slug,
+                title=problem.title,
+                difficulty=problem.difficulty,
+                frontend_id=problem.frontend_id,
+                tags=tuple(tag["name"] for tag in problem.topic_tags or []),
+                solves=solves.get(problem.slug, 0),
+                status=status,
+                paused=problem.paused,
+                last_solved=as_utc(card.last_review) if card and card.last_review else None,
+                next_review=as_utc(card.due) if card and not problem.paused else None,
+                recall=recall(card, now, scheduler) if card else None,
+                last_activity=(
+                    as_utc(problem.last_submitted_at) if problem.last_submitted_at else None
+                ),
+            )
+        )
+    latest = datetime.max.replace(tzinfo=UTC)
+    items.sort(key=lambda row: (row.next_review or latest, row.slug))
+    return items
+
+
 def reviews_done_today(session: Session, day_start: datetime) -> int:
     """Problems reviewed since `day_start` that already had a card (re-solves, manual reviews).
 

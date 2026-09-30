@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router'
 
 import { AppLayout } from '@/components/app-layout'
 import { PlaceholderPage } from '@/pages/placeholder'
+import { SolvedPage } from '@/pages/solved'
 import { TodayPage } from '@/pages/today'
 
 export const router = createBrowserRouter([
@@ -15,7 +16,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'solved',
-        element: <PlaceholderPage title="Solved" description="Every problem you've solved (build step 3)." />,
+        element: <SolvedPage />,
       },
       {
         path: 'insights',

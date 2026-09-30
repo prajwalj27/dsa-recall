@@ -34,6 +34,7 @@ import { problemCount, usePauseActions } from '@/hooks/use-pause-actions'
 import { useRowSelection } from '@/hooks/use-row-selection'
 import type { AttemptedItem, DueSection, PausedItem, PendingItem, StudyMode } from '@/lib/api'
 import { useConfirmAll, useRateSolve, useToday } from '@/lib/queries'
+import { ACTIONS, HEAD, HEAD_ROW, ROW, TABLE, TITLE_WRAP, WIDE } from '@/lib/table-styles'
 import { cn } from '@/lib/utils'
 
 export function TodayPage() {
@@ -72,17 +73,6 @@ function TodaySkeleton() {
     </>
   )
 }
-
-// --- Shared table styling -------------------------------------------------------------------
-// Zebra rows with rounded ends (no dividers); actions muted until the row is hovered/focused.
-
-const TABLE = 'table-fixed border-separate border-spacing-0'
-const HEAD_ROW = 'border-0 hover:bg-transparent'
-const HEAD = 'h-8 text-xs font-normal text-muted-foreground'
-const ROW =
-  'group border-0 hover:bg-muted/60 even:bg-muted/30 [&>td:first-child]:rounded-l-md [&>td:last-child]:rounded-r-md'
-const ACTIONS =
-  'text-muted-foreground group-hover:text-foreground group-focus-within:text-foreground max-sm:size-10'
 
 // --- Rate your new solves -------------------------------------------------------------------
 
@@ -165,8 +155,6 @@ function RateSection({ pending, studyMode }: { pending: PendingItem[]; studyMode
 // with difficulty, recall, due and last solved under a title that may wrap.
 // Hovering a row reveals its checkbox; ticking one starts selection for bulk pausing.
 
-const WIDE = 'hidden @2xl:table-cell'
-const TITLE_WRAP = '@max-2xl:line-clamp-2 @max-2xl:whitespace-normal'
 
 function DueList({ due }: { due: DueSection }) {
   const [showAll, setShowAll] = useState(false)

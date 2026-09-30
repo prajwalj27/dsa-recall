@@ -104,6 +104,22 @@ export type Target = {
   interview_retention: number
 }
 
+/** A row on the Solved page: any problem submitted to (solved or attempted). */
+export type SolvedRow = {
+  slug: string
+  title: string
+  difficulty: Difficulty
+  frontend_id: string | null
+  tags: string[]
+  solves: number
+  status: 'due' | 'scheduled' | 'paused' | 'unsolved'
+  paused: boolean
+  last_solved: string | null
+  next_review: string | null // none while paused or unsolved
+  recall: number | null
+  last_activity: string | null
+}
+
 export type Today = {
   pending: PendingItem[]
   due: DueSection
@@ -179,6 +195,7 @@ export type SyncStatus = {
 export const endpoints = {
   health: () => api<Health>('/health'),
   today: () => api<Today>('/today'),
+  solved: () => api<SolvedRow[]>('/solved'),
   problem: (slug: string) => api<ProblemDetail>(`/problems/${encodeURIComponent(slug)}`),
   markReviewed: (slug: string, choice: Choice) =>
     send('POST', `/problems/${encodeURIComponent(slug)}/review`, { choice }),
