@@ -2,13 +2,14 @@
 
 python -m app.sync           # backfill on first run, incremental afterwards
 python -m app.sync --full    # walk every problem (manual resync)
+python -m app.sync --prod    # the real database (default: dev)
 """
 
 import argparse
 import sys
 
-from app.config import get_settings
-from app.db.migrate import upgrade_to_head
+from app.cli import add_env_flag, select_env
+from app.db.migrate import prepare_database
 from app.db.session import get_sessionmaker
 from app.leetcode import LeetCodeClient
 from app.sync.engine import run_sync
@@ -32,10 +33,11 @@ def _print_progress(progress: SyncProgress) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(prog="python -m app.sync", description=__doc__)
     parser.add_argument("--full", action="store_true", help="walk every problem")
+    add_env_flag(parser)
     args = parser.parse_args()
 
-    settings = get_settings()
-    upgrade_to_head(settings.database_url)
+    settings = select_env(args.prod)
+    prepare_database(settings)
     with LeetCodeClient(settings) as client:
         progress = run_sync(get_sessionmaker(), client, full=args.full, report=_print_progress)
 

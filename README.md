@@ -44,7 +44,26 @@ uvicorn app.main:app --reload     # terminal 1
 npm run dev --prefix web          # terminal 2
 ```
 
-The SQLite database is created at `data/dsa-recall.db` and migrated automatically on startup.
+Databases are created and migrated automatically on startup; see *Dev and prod data* below.
+
+## Dev and prod data
+
+Two separate SQLite files, so development never touches your real history:
+
+| Database | File | Used by |
+| --- | --- | --- |
+| **prod** | `data/dsa-recall.db` | `dsa-recall` (the real app), and tools run with `--prod` |
+| **dev** | `data/dsa-recall.dev.db` | everything else: `uvicorn --reload`, `npm run dev`, `python -m app.sync`, `python -m app.engines.reviews`, `alembic` |
+
+```powershell
+python -m app.db status              # both databases, schema versions, row counts, backups
+python -m app.db copy-prod-to-dev    # fresh dev copy of your real data (prod is only read)
+python -m app.db backup              # manual prod backup into data/backups/
+python -m app.sync --prod            # a tool on the real data, on purpose
+```
+
+In dev, the UI shows a **DEV** badge and the tab title starts with `[dev]`. Before prod applies
+a new schema migration, it backs itself up to `data/backups/` automatically (last 5 kept).
 
 ## Checks
 

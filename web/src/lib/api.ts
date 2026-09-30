@@ -32,6 +32,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 const send = <T>(method: string, path: string, body: unknown) =>
   api<T>(path, { method, body: JSON.stringify(body) })
 
+export type Health = { status: string; version: string; env: 'dev' | 'prod'; database: string }
+
 // --- Shared ------------------------------------------------------------------------------
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard'
@@ -157,6 +159,7 @@ export type SyncStatus = {
 // --- Endpoints ---------------------------------------------------------------------------
 
 export const endpoints = {
+  health: () => api<Health>('/health'),
   today: () => api<Today>('/today'),
   problem: (slug: string) => api<ProblemDetail>(`/problems/${encodeURIComponent(slug)}`),
   markReviewed: (slug: string, choice: Choice) =>

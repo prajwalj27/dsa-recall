@@ -14,8 +14,8 @@ from datetime import date
 
 from sqlalchemy import func, select
 
-from app.config import get_settings
-from app.db.migrate import upgrade_to_head
+from app.cli import add_env_flag, select_env
+from app.db.migrate import prepare_database
 from app.db.models import Card
 from app.db.session import get_sessionmaker
 from app.engines.reviews import (
@@ -35,6 +35,7 @@ CHOICES["saw"] = Choice.SAW_SOLUTION
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.engines.reviews", description=__doc__)
+    add_env_flag(parser)
     sub = parser.add_subparsers(dest="command", required=True)
 
     due = sub.add_parser("due", help="reviews due now, lowest recall first")
@@ -60,7 +61,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
-    upgrade_to_head(get_settings().database_url)
+    prepare_database(select_env(args.prod))
 
     with get_sessionmaker()() as session, session.begin():
         match args.command:

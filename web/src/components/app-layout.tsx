@@ -5,6 +5,7 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 import { ProblemPanel } from '@/components/problem-panel'
 import { SyncBanner } from '@/components/sync-banner'
 import { SyncControl } from '@/components/sync-control'
+import { Badge } from '@/components/ui/badge'
 import {
   Sidebar,
   SidebarContent,
@@ -19,7 +20,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
-import { useToday } from '@/lib/queries'
+import { useHealth, useToday } from '@/lib/queries'
 
 const NAV = [
   { to: '/', label: 'Today', icon: House },
@@ -32,17 +33,32 @@ const NAV = [
 export function AppLayout() {
   const { pathname } = useLocation()
   const { data: today } = useToday()
+  const { data: health } = useHealth()
   const dueCount = today?.due.total_due ?? 0
+  const isDev = health?.env === 'dev'
 
-  // The due count in the tab title (design doc: always visible).
+  // The due count in the tab title (design doc: always visible); dev is marked so it's
+  // never mistaken for the real data.
   useEffect(() => {
-    document.title = dueCount > 0 ? `(${dueCount}) DSA Recall` : 'DSA Recall'
-  }, [dueCount])
+    const base = dueCount > 0 ? `(${dueCount}) DSA Recall` : 'DSA Recall'
+    document.title = isDev ? `[dev] ${base}` : base
+  }, [dueCount, isDev])
 
   return (
     <SidebarProvider>
       <Sidebar>
-        <SidebarHeader className="px-4 py-3 text-lg font-semibold">DSA Recall</SidebarHeader>
+        <SidebarHeader className="flex-row items-center gap-2 px-4 py-3 text-lg font-semibold">
+          DSA Recall
+          {isDev ? (
+            <Badge
+              variant="outline"
+              className="border-medium/50 text-medium"
+              title={`Development database: ${health?.database ?? ''}`}
+            >
+              DEV
+            </Badge>
+          ) : null}
+        </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupContent>

@@ -6,6 +6,12 @@ export const keys = {
   today: ['today'] as const,
   problem: (slug: string) => ['problem', slug] as const,
   sync: ['sync'] as const,
+  health: ['health'] as const,
+}
+
+/** Which environment (dev/prod) the backend runs; fixed for the server's lifetime. */
+export function useHealth() {
+  return useQuery({ queryKey: keys.health, queryFn: endpoints.health, staleTime: Infinity })
 }
 
 export function useToday() {
