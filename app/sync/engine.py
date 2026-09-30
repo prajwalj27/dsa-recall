@@ -11,13 +11,13 @@ same transaction as its submissions. So a problem with matching markers is fully
 
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Problem, Solve, Submission, SyncState
+from app.engines.reviews import HISTORY, INFERRED, schedule_new_solves
 from app.leetcode import (
     AuthExpiredError,
     LeetCodeClient,
@@ -29,6 +29,7 @@ from app.leetcode.schemas import ProgressQuestion
 from app.sync.codehash import code_hash
 from app.sync.progress import ErrorKind, RunState, SyncProgress
 from app.sync.solves import Attempt, group_solves
+from app.timeutil import utc_naive, utc_now
 
 log = logging.getLogger(__name__)
 
@@ -40,11 +41,6 @@ INCREMENTAL_PAGE_SIZE = 20
 
 SessionFactory = Callable[[], Session]
 Reporter = Callable[[SyncProgress], None]
-
-
-def utc_naive(dt: datetime) -> datetime:
-    """The DB stores naive UTC datetimes."""
-    return dt.astimezone(UTC).replace(tzinfo=None) if dt.tzinfo else dt
 
 
 def get_state(session: Session, key: str, default: Any = None) -> Any:
@@ -64,64 +60,93 @@ def run_sync(
     full: bool = False,
     report: Reporter | None = None,
 ) -> SyncProgress:
-    """Run one sync. Never raises for LeetCode problems; the outcome is in the returned progress."""
+    """Run one sync, then schedule reviews for new solves.
+
+    Never raises for LeetCode or DB problems; the outcome is in the returned progress.
+    """
     progress = progress or SyncProgress()
     progress.reset()  # the manager reuses one instance across runs
     progress.state = RunState.RUNNING
-    progress.started_at = datetime.now(UTC)
+    progress.started_at = utc_now()
     notify = report or (lambda _p: None)
 
     try:
-        progress.phase = "auth"
-        notify(progress)
-        client.check_auth()
-
-        with session_factory() as session:
-            backfill = full or not get_state(session, "backfill_done", False)
-        progress.mode = "backfill" if backfill else "incremental"
-
-        progress.phase = "listing"
-        notify(progress)
-        if backfill:
-            remote = list(client.iter_progress())
-            progress.total = len(remote)
-        else:
-            remote = client.iter_progress(page_size=INCREMENTAL_PAGE_SIZE)
-
-        progress.phase = "problems"
-        for question in remote:
-            progress.current_slug = question.title_slug
-            with session_factory() as session, session.begin():
-                problem = session.get(Problem, question.title_slug)
-                unchanged = problem is not None and _markers_match(problem, question)
-                if unchanged and not backfill:
-                    break
-                if not unchanged:
-                    _sync_problem(session, client, question, problem, progress)
-            progress.done += 1
-            notify(progress)
-
-        with session_factory() as session, session.begin():
-            set_state(session, "last_sync_at", datetime.now(UTC).isoformat())
-            if backfill:
-                set_state(session, "backfill_done", True)
-        progress.state = RunState.SUCCEEDED
+        _walk(session_factory, client, progress, full, notify)
     except LeetCodeError as exc:
-        progress.state = RunState.FAILED
-        progress.error_kind = _error_kind(exc)
-        progress.error = str(exc)
+        _fail(progress, _error_kind(exc), str(exc))
     except Exception as exc:
         log.exception("Sync failed")
-        progress.state = RunState.FAILED
-        progress.error_kind = ErrorKind.OTHER
-        progress.error = f"{type(exc).__name__}: {exc}"
-    finally:
-        progress.phase = "done"
-        progress.current_slug = None
-        progress.finished_at = datetime.now(UTC)
+        _fail(progress, ErrorKind.OTHER, f"{type(exc).__name__}: {exc}")
+
+    # Even if the walk stopped early, solves it committed should get cards.
+    progress.phase = "scheduling"
+    progress.current_slug = None
+    notify(progress)
+    try:
+        with session_factory() as session, session.begin():
+            progress.scheduled = schedule_new_solves(session)
+    except Exception as exc:
+        log.exception("Scheduling reviews failed")
+        if progress.error_kind is None:
+            _fail(progress, ErrorKind.OTHER, f"Scheduling reviews failed: {exc}")
+
+    if progress.error_kind is None:
+        progress.state = RunState.SUCCEEDED
+    progress.phase = "done"
+    progress.finished_at = utc_now()
+    notify(progress)
+    return progress
+
+
+def _walk(
+    session_factory: SessionFactory,
+    client: LeetCodeClient,
+    progress: SyncProgress,
+    full: bool,
+    notify: Reporter,
+) -> None:
+    progress.phase = "auth"
+    notify(progress)
+    client.check_auth()
+
+    with session_factory() as session:
+        backfill_done = bool(get_state(session, "backfill_done", False))
+    backfill = full or not backfill_done
+    # Solves found before the first backfill finishes are history: rated silently.
+    rating_source = HISTORY if not backfill_done else INFERRED
+    progress.mode = "backfill" if backfill else "incremental"
+
+    progress.phase = "listing"
+    notify(progress)
+    if backfill:
+        remote = list(client.iter_progress())
+        progress.total = len(remote)
+    else:
+        remote = client.iter_progress(page_size=INCREMENTAL_PAGE_SIZE)
+
+    progress.phase = "problems"
+    for question in remote:
+        progress.current_slug = question.title_slug
+        with session_factory() as session, session.begin():
+            problem = session.get(Problem, question.title_slug)
+            unchanged = problem is not None and _markers_match(problem, question)
+            if unchanged and not backfill:
+                break
+            if not unchanged:
+                _sync_problem(session, client, question, problem, progress, rating_source)
+        progress.done += 1
         notify(progress)
 
-    return progress
+    with session_factory() as session, session.begin():
+        set_state(session, "last_sync_at", utc_now().isoformat())
+        if backfill:
+            set_state(session, "backfill_done", True)
+
+
+def _fail(progress: SyncProgress, kind: ErrorKind, message: str) -> None:
+    progress.state = RunState.FAILED
+    progress.error_kind = kind
+    progress.error = message
 
 
 def _markers_match(problem: Problem, question: ProgressQuestion) -> bool:
@@ -147,6 +172,7 @@ def _sync_problem(
     question: ProgressQuestion,
     problem: Problem | None,
     progress: SyncProgress,
+    rating_source: str,
 ) -> None:
     """Bring one problem fully up to date. Runs inside the caller's transaction."""
     slug = question.title_slug
@@ -166,7 +192,7 @@ def _sync_problem(
         problem.ac_rate = detail.ac_rate
         problem.is_paid_only = detail.is_paid_only
         problem.similar_questions = [q.model_dump() for q in detail.similar_questions]
-        problem.fetched_at = utc_naive(datetime.now(UTC))
+        problem.fetched_at = utc_naive(utc_now())
 
     # New submissions: newest first, stop at the first one we already have.
     known = set(session.scalars(select(Submission.submission_id).where(Submission.slug == slug)))
@@ -207,6 +233,7 @@ def _sync_problem(
                 accepted_submission_id=spec.accepted_submission_id,
                 wrong_before_ac=spec.wrong_before_ac,
                 accepted_at=spec.accepted_at,
+                rating_source=rating_source,
             )
         )
         for submission_id in (spec.accepted_submission_id, *spec.failed_submission_ids):

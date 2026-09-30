@@ -1,16 +1,11 @@
 import threading
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
-from sqlalchemy.orm import Session
 
-from app.config import get_settings
-from app.db.migrate import upgrade_to_head
-from app.db.session import get_sessionmaker
 from app.leetcode import AuthExpiredError, LeetCodeError
 from app.leetcode.schemas import (
     Lang,
@@ -177,12 +172,6 @@ def sample_problems() -> list[FakeProblem]:
             difficulty="Hard",
         ),
     ]
-
-
-@pytest.fixture
-def session_factory(db_path: Path) -> Callable[[], Session]:
-    upgrade_to_head(get_settings().database_url)
-    return get_sessionmaker()
 
 
 @pytest.fixture

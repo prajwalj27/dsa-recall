@@ -1,6 +1,7 @@
 from sqlalchemy import func, select
 
-from app.db.models import Problem, Solve, Submission
+from app.db.models import Card, Problem, ReviewLog, Solve, Submission
+from app.engines.reviews import pending_ratings
 from app.leetcode import RateLimitedError
 from app.sync.engine import get_state, run_sync
 from app.sync.progress import ErrorKind, RunState
@@ -137,3 +138,42 @@ def test_full_resync_walks_everything_but_skips_unchanged(session_factory, fake)
     assert progress.mode == "backfill"
     assert progress.done == 3
     assert fake.calls["submissions"] == 0
+
+
+# --- Review scheduling hook (plan 004) ---------------------------------------------------
+
+
+def test_backfill_schedules_history_cards_for_solved_problems(session_factory, fake) -> None:
+    progress = run_sync(session_factory, fake)
+
+    assert progress.scheduled == 3
+    with session_factory() as s:
+        # median-of-two-sorted-arrays is attempted-only: no card
+        assert sorted(s.scalars(select(Card.slug))) == ["two-sum", "walls-and-gates"]
+        assert s.scalar(select(func.count()).select_from(ReviewLog)) == 3
+        assert set(s.scalars(select(Solve.rating_source))) == {"history"}
+        assert pending_ratings(s) == []
+
+
+def test_solves_after_backfill_await_rating(session_factory, fake) -> None:
+    run_sync(session_factory, fake)
+    fake.add("two-sum", FakeSub(106, "Accepted", day(60)))
+
+    progress = run_sync(session_factory, fake)
+
+    assert progress.scheduled == 1
+    with session_factory() as s:
+        [pending] = pending_ratings(s)
+        assert pending.slug == "two-sum" and pending.default == "good"
+        assert s.get(Card, "two-sum").reps == 3
+
+
+def test_solves_committed_before_a_failure_still_get_cards(session_factory, fake) -> None:
+    fake.fail_on["submission_detail"] = (3, RateLimitedError("slow down"))
+
+    progress = run_sync(session_factory, fake)
+
+    assert progress.state is RunState.FAILED
+    assert progress.scheduled == 1
+    with session_factory() as s:
+        assert s.scalars(select(Card.slug)).all() == ["walls-and-gates"]

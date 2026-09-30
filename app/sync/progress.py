@@ -24,12 +24,13 @@ class SyncProgress:
 
     state: RunState = RunState.IDLE
     mode: Literal["backfill", "incremental"] | None = None
-    phase: Literal["auth", "listing", "problems", "done"] | None = None
+    phase: Literal["auth", "listing", "problems", "scheduling", "done"] | None = None
     done: int = 0  # problems processed (synced or skipped as unchanged)
     total: int | None = None  # known in backfill mode only
     current_slug: str | None = None
     new_submissions: int = 0
     new_solves: int = 0
+    scheduled: int = 0  # solves given a review row (and card) after the walk
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error_kind: ErrorKind | None = None

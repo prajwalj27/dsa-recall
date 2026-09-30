@@ -24,8 +24,9 @@ def _print_progress(progress: SyncProgress) -> None:
             end="",
             flush=True,
         )
-    elif progress.phase in ("auth", "listing"):
-        print(f"{progress.phase}...", flush=True)
+    elif progress.phase in ("auth", "listing", "scheduling"):
+        prefix = "\n" if progress.phase == "scheduling" and progress.done else ""
+        print(f"{prefix}{progress.phase}...", flush=True)
 
 
 def main() -> int:
@@ -38,11 +39,11 @@ def main() -> int:
     with LeetCodeClient(settings) as client:
         progress = run_sync(get_sessionmaker(), client, full=args.full, report=_print_progress)
 
-    print()
     if progress.state is RunState.SUCCEEDED:
         print(
             f"Done ({progress.mode}): {progress.done} problems checked, "
-            f"{progress.new_submissions} new submissions, {progress.new_solves} new solves."
+            f"{progress.new_submissions} new submissions, {progress.new_solves} new solves, "
+            f"{progress.scheduled} scheduled for review."
         )
         return 0
     print(f"Sync failed [{progress.error_kind}]: {progress.error}", file=sys.stderr)

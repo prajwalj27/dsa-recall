@@ -9,7 +9,7 @@ Conventions:
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -71,15 +71,20 @@ class Solve(Base):
     )
     wrong_before_ac: Mapped[int] = mapped_column(default=0)
     accepted_at: Mapped[datetime]
-    rating: Mapped[int | None]  # 1-4 (Again/Hard/Good/Easy); null until rated or inferred
-    rating_inferred: Mapped[bool] = mapped_column(default=False)
+    rating: Mapped[int | None]  # effective FSRS rating 1-4; null until scheduled
+    # history: from the first backfill, inferred silently
+    # inferred: default applied, awaiting the user's confirmation ("Rate your new solves")
+    # user: chosen by the user
+    rating_source: Mapped[str] = mapped_column(default="inferred", server_default="inferred")
+    # "Saw solution": learned from the solution; scheduled as Again but kept distinct.
+    used_solution: Mapped[bool] = mapped_column(default=False, server_default="0")
 
 
 # --- Spaced repetition -------------------------------------------------------
 
 
 class Card(Base):
-    """FSRS card for a solved problem."""
+    """FSRS card for a solved problem: a cache rebuilt by replaying its review_log rows."""
 
     __tablename__ = "cards"
 
@@ -95,13 +100,18 @@ class Card(Base):
 
 
 class ReviewLog(Base):
-    """One review event; kept forever so FSRS parameters can be tuned later."""
+    """One review event and the source of truth for scheduling.
+
+    One row per solve, plus manual "Mark reviewed" rows. Kept forever so FSRS parameters
+    can be tuned to the user's history later.
+    """
 
     __tablename__ = "review_log"
+    __table_args__ = (Index("ux_review_log_solve_id", "solve_id", unique=True),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(ForeignKey("problems.slug"), index=True)
-    # Null for manual "Mark reviewed" events.
+    # At most one row per solve; null for manual "Mark reviewed" events.
     solve_id: Mapped[int | None] = mapped_column(ForeignKey("solves.id"))
     rating: Mapped[int]
     reviewed_at: Mapped[datetime]
