@@ -129,16 +129,17 @@ Each solved problem is one FSRS card scheduled by `py-fsrs`. A review means re-s
 
 **Daily target**
 
-The user picks a mode in Settings. The target counts reviews only; suggestions show separately and never count toward it, and users can solve as much beyond the target as they like.
+The user picks a mode from the daily target control on Today, and a change takes effect only when they press Apply. The target counts reviews only; suggestions show separately and never count toward it, and users can solve as much beyond the target as they like.
 
 | Mode | Daily review target | Desired retention |
 | --- | --- | --- |
-| Casual | 3–5 | 0.90 |
-| Steady | 6–10 | 0.90 |
-| Interview prep | 10–20 | 0.95, with an optional end date after which the previous mode returns |
-| Custom | Any number | User-set |
+| Casual | 5 (fixed) | 0.90 (fixed) |
+| Steady (default) | 8 (fixed) | 0.90 (fixed) |
+| Interview | User-set, 1–100 (default 15) | User-set, 0.80–0.95 (default 0.95) |
 
-- More due than the target: show up to the target, lowest recall first; the rest roll over.
+Modes have no end dates; users switch between them themselves. Interview remembers its own values, so switching back to it restores them.
+
+- More due than the target: show up to the target, highest priority first, where priority = (1 − recall) × difficulty weight (Easy 1, Medium 1.5, Hard 2); the rest roll over.
 - Solving beyond the target: a re-solve of a card not yet due is logged as an early review, which FSRS handles; a new problem becomes a new card.
 - Every review is kept in `review_log`, so FSRS parameters can later be tuned to the user's own history.
 
@@ -146,7 +147,8 @@ The user picks a mode in Settings. The target counts reviews only; suggestions s
 
 - They stay in the queue, labeled with days overdue; recall % keeps dropping.
 - A late successful review is not wasted: FSRS pushes the next one further out.
-- Snooze delays a review a few days; suspend removes a problem from reviews entirely.
+- Snooze delays a review a few days.
+- **Pause** takes problems off Today, one at a time or several at once (hover a row's checkbox): solved problems leave the review queue, attempted ones leave "Attempted, not yet solved". Useful to focus on a specific problem list. A paused problem keeps its history; solving it on LeetCode (or "Mark reviewed") resumes it automatically, scheduled from that fresh solve, and it can be resumed by hand from the Paused section on Today.
 - No escalating reminders; the due count simply stays visible.
 
 **Returning users**
@@ -224,9 +226,9 @@ Five pages in a sidebar, plus a problem detail panel that opens from any page. T
 | --- | --- | --- |
 | Today (home) | What to do now | Rate your new solves; Due for review (up to the daily target); Attempted, not yet solved; Suggested (not counted toward the target) |
 | Skill tree | Where the user stands | Full-screen brain map; node side panel |
-| Solved | Full record | Sortable, filterable table: problem, difficulty, skills, times solved, last solved, next review, status (learning, reviewing, mastered) |
+| Solved | Full record | Sortable, filterable table of every problem submitted to: problem, difficulty, skills (LeetCode topic tags until skills exist), times solved, last solved, next review, recall, status (due, scheduled, paused, unsolved; mastered once mastery exists). Search, status and difficulty and tag filters, bulk pause/resume; a problem opens its detail panel |
 | Insights | Trends | Solves and reviews per week, retention rate, most common mistake types, weekly LLM summary |
-| Settings | Setup | LeetCode connection status, LLM provider and model per task, daily target mode (Casual, Steady, Interview prep, Custom), notifications, manual resync, export data |
+| Settings | Setup | LeetCode connection status, LLM provider and model per task, daily target mode (Casual, Steady, Interview), notifications, manual resync, export data |
 
 **Today screen**
 
@@ -252,7 +254,7 @@ Five pages in a sidebar, plus a problem detail panel that opens from any page. T
 - Difficulty, skills (each links to its node in the tree), "Open on LeetCode"
 - Timeline of submissions: failed attempts, accepts, reviews
 - Approach and complexity from solution analysis, and whether it was optimal
-- Next review date, recall %, snooze and suspend
+- Next review date, recall %, pause/resume, snooze
 
 **First run**
 
@@ -274,10 +276,10 @@ One local SQLite file with 14 tables in four groups. Mastery, node states, and d
 
 | Table | One row per | Key columns |
 | --- | --- | --- |
-| `problems` | Problem solved or considered as a suggestion | `slug` (PK), `title`, `difficulty`, `ac_rate`, `topic_tags` (JSON), `similar_questions` (JSON), `statement`, `fetched_at` |
+| `problems` | Problem solved or considered as a suggestion | `slug` (PK), `title`, `difficulty`, `ac_rate`, `topic_tags` (JSON), `similar_questions` (JSON), `statement`, `fetched_at`, `paused` |
 | `submissions` | Submission, accepted or failed | `submission_id` (PK), `slug`, `status`, `lang`, `timestamp`, `runtime_ms`, `code`, `code_hash` |
 | `solves` | Accepted solve grouped with the failed attempts before it | `id`, `slug`, `accepted_submission_id`, `wrong_before_ac`, `accepted_at`, `rating` (1–4), `rating_inferred` |
-| `cards` | Solved problem | `slug` (PK), `due`, `stability`, `difficulty`, `reps`, `lapses`, `state`, `last_review`, `suspended` |
+| `cards` | Solved problem | `slug` (PK), `due`, `stability`, `difficulty`, `reps`, `lapses`, `state`, `last_review` |
 | `review_log` | Review event | `slug`, `solve_id`, `rating`, `reviewed_at` |
 | `skills` | Skill tree node | `id` (PK), `name`, `description`, `aliases` (JSON), `created_at`, `merged_into` |
 | `skill_edges` | Link between two nodes | `from_skill`, `to_skill`, `type` (prerequisite or related) |
@@ -343,7 +345,7 @@ Each step is usable before the next starts.
 2. **LLM pipeline:** provider adapter and config check, problem analysis, solution analysis, taxonomy step, caching.
 3. **Mastery + suggestions:** mastery scoring, candidate selection, rerank, Solved page.
 4. **Skill tree:** brain map, node states, side panel.
-5. **Insights + polish:** Insights page, notifications, snooze/suspend, settings, export.
+5. **Insights + polish:** Insights page, notifications, snooze, settings, export.
 
 Before step 2, hand-label 20–30 problems you know well (techniques, your approach) and use them to pick models per task.
 
@@ -364,3 +366,4 @@ The main risk is LeetCode changing its undocumented API; all LeetCode code lives
 
 - Manual "save for later" list: paste a LeetCode link to track a problem you haven't started, e.g., while working through a playlist.
 - Live desktop notifications: a standalone script opens the SQLite file read-only every few minutes, finds cards whose due time has passed, and sends one native notification when reviews become due (via `desktop-notifier`). It runs at login or once a day via Task Scheduler, and keeps a small state file so it doesn't repeat itself. Optionally it runs a quick incremental sync first, so problems re-solved since the last sync aren't reported as due.
+- Premium problems: fetch statements for paid-only problems when the user has LeetCode Premium. Until then, paid-only problems are stored with metadata (title, difficulty, tags) but no statement, and problem analysis works from tags and title only.
