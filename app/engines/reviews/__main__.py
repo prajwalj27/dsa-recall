@@ -4,13 +4,12 @@ python -m app.engines.reviews due [--limit N]
 python -m app.engines.reviews pending
 python -m app.engines.reviews rate SOLVE_ID {again,hard,good,easy,saw}
 python -m app.engines.reviews review SLUG {again,hard,good,easy,saw}
-python -m app.engines.reviews study-mode {on,off} [--until YYYY-MM-DD]
+python -m app.engines.reviews study-mode {on,off}
 python -m app.engines.reviews rebuild
 """
 
 import argparse
 import sys
-from datetime import date
 
 from sqlalchemy import func, select
 
@@ -53,7 +52,6 @@ def _parser() -> argparse.ArgumentParser:
 
     study = sub.add_parser("study-mode", help="first solves default to 'Saw solution'")
     study.add_argument("state", choices=["on", "off"])
-    study.add_argument("--until", type=date.fromisoformat, help="last day, YYYY-MM-DD")
 
     sub.add_parser("rebuild", help="rebuild every card from the review log")
     return parser
@@ -89,10 +87,8 @@ def main() -> int:
                 card = mark_reviewed(session, args.slug, CHOICES[args.choice])
                 print(f"Reviewed {args.slug}; next review {card.due:%Y-%m-%d}")
             case "study-mode":
-                set_study_mode(session, args.state == "on", args.until)
-                mode = get_study_mode(session)
-                until = f" until {mode.until}" if mode.until else ""
-                print(f"Study mode {'on' + until if mode.enabled else 'off'}")
+                set_study_mode(session, args.state == "on")
+                print(f"Study mode {'on' if get_study_mode(session).enabled else 'off'}")
             case "rebuild":
                 print(f"Rebuilt {rebuild_all(session)} cards")
     return 0

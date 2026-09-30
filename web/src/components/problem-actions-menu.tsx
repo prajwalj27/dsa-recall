@@ -1,4 +1,4 @@
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, PauseCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -7,24 +7,33 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { usePauseActions } from '@/hooks/use-pause-actions'
 import { CHOICES } from '@/lib/choices'
 import { useMarkReviewed } from '@/lib/queries'
 
-/** "Mark reviewed" for a re-solve done outside LeetCode (a re-solve on LeetCode syncs itself). */
-export function MarkReviewedMenu({
+/**
+ * Row actions for a problem with a card: pause its reviews, or mark it reviewed (a re-solve
+ * done outside LeetCode; a re-solve on LeetCode syncs itself).
+ */
+export function ProblemActionsMenu({
   slug,
   title,
   trigger = 'icon',
+  showPause = true,
   className,
 }: {
   slug: string
   title: string
   trigger?: 'icon' | 'button'
+  showPause?: boolean
   className?: string
 }) {
   const markReviewed = useMarkReviewed()
+  const { pauseProblems } = usePauseActions()
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -44,6 +53,15 @@ export function MarkReviewedMenu({
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {showPause ? (
+          <>
+            <DropdownMenuItem onSelect={() => pauseProblems([slug], title)}>
+              <PauseCircle />
+              Pause reviews
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuLabel>Mark reviewed as</DropdownMenuLabel>
         {CHOICES.map((choice) => (
           <DropdownMenuItem

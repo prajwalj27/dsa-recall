@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 import fsrs
 import pytest
@@ -113,8 +113,9 @@ def test_study_mode_defaults_first_solves_to_saw_solution(session) -> None:
     assert defaults == {"new-problem": Choice.SAW_SOLUTION, "old-problem": Choice.GOOD}
 
 
-def test_study_mode_ends_after_until(session) -> None:
-    set_study_mode(session, True, until=date(2026, 9, 1))
+def test_study_mode_off_again_rates_normally(session) -> None:
+    set_study_mode(session, True)
+    set_study_mode(session, False)
     add_problem(session, "two-sum")
     solve = add_solve(session, "two-sum", at(0))
 

@@ -52,12 +52,12 @@ def test_today(client: TestClient, seeded) -> None:
         "4",
     )
     assert today["target"]["mode"] == "steady"
-    assert today["study_mode"] == {"enabled": False, "until": None, "active": False}
+    assert today["study_mode"] == {"enabled": False}
     assert today["backfill_done"] is True
 
 
 def test_shown_is_limited_by_target_minus_done(client: TestClient, seeded) -> None:
-    client.put("/api/settings/target", json={"mode": "custom", "daily_target": 2})
+    client.put("/api/settings/target", json={"mode": "interview", "daily_target": 2})
     client.post("/api/problems/easy-one/review", json={"choice": "good"})
 
     due = client.get("/api/today").json()["due"]
@@ -97,16 +97,39 @@ def test_problem_without_card(client: TestClient, seeded) -> None:
     assert client.post("/api/problems/stuck/review", json={"choice": "good"}).status_code == 409
 
 
-def test_target_and_study_mode(client: TestClient, seeded) -> None:
-    target = client.put(
-        "/api/settings/target", json={"mode": "interview", "interview_end_date": "2099-01-01"}
-    ).json()
-    assert (target["mode"], target["daily_target"], target["retention"]) == ("interview", 15, 0.95)
-    assert client.get("/api/settings/target").json()["previous_mode"] == "steady"
+def test_pause_and_resume(client: TestClient, seeded) -> None:
+    paused = client.post("/api/problems/pause", json={"slugs": ["hard-one", "stuck", "nope"]})
+    assert paused.json() == {"changed": 1}  # stuck has no card, nope doesn't exist
 
-    study = client.put("/api/settings/study-mode", json={"enabled": True, "until": "2099-01-01"})
-    assert study.json() == {"enabled": True, "until": "2099-01-01", "active": True}
-    assert client.get("/api/today").json()["study_mode"]["active"] is True
+    today = client.get("/api/today").json()
+    assert [i["slug"] for i in today["due"]["items"]] == ["easy-one"]
+    assert today["due"]["total_due"] == 1
+    assert [p["slug"] for p in today["paused"]] == ["hard-one"]
+    assert today["paused"][0]["frontend_id"] == "410"
+    assert client.get("/api/problems/hard-one").json()["card"]["paused"] is True
+
+    resumed = client.post("/api/problems/resume", json={"slugs": ["hard-one"]})
+    assert resumed.json() == {"changed": 1}
+    assert client.get("/api/today").json()["paused"] == []
+
+    client.post("/api/problems/pause", json={"slugs": ["hard-one", "easy-one"]})
+    assert client.post("/api/problems/resume", json={"all": True}).json() == {"changed": 2}
+    assert client.get("/api/today").json()["due"]["total_due"] == 2
+
+
+def test_target_and_study_mode(client: TestClient, seeded) -> None:
+    target = client.put("/api/settings/target", json={"mode": "interview"}).json()
+    assert (target["mode"], target["daily_target"], target["retention"]) == ("interview", 15, 0.95)
+
+    custom = {"mode": "interview", "daily_target": 12, "retention": 0.85}
+    assert client.put("/api/settings/target", json=custom).json()["daily_target"] == 12
+    steady = client.put("/api/settings/target", json={"mode": "steady"}).json()
+    assert (steady["daily_target"], steady["interview_target"]) == (8, 12)
+    assert client.get("/api/settings/target").json() == steady
+
+    study = client.put("/api/settings/study-mode", json={"enabled": True})
+    assert study.json() == {"enabled": True}
+    assert client.get("/api/today").json()["study_mode"] == {"enabled": True}
 
 
 @pytest.mark.parametrize(
@@ -117,9 +140,13 @@ def test_target_and_study_mode(client: TestClient, seeded) -> None:
         ("post", "/api/solves/99999/rating", {"choice": "good"}, 404),
         ("post", "/api/solves/1/rating", {"choice": "meh"}, 422),
         ("post", "/api/solves/confirm", {"solve_ids": []}, 422),
+        ("post", "/api/problems/pause", {"slugs": []}, 422),
+        ("post", "/api/problems/resume", {}, 422),
         ("put", "/api/settings/target", {"mode": "hardcore"}, 422),
-        ("put", "/api/settings/target", {"mode": "custom", "daily_target": 0}, 422),
-        ("put", "/api/settings/target", {"mode": "custom", "retention": 0.5}, 422),
+        ("put", "/api/settings/target", {"mode": "custom"}, 422),
+        ("put", "/api/settings/target", {"mode": "interview", "daily_target": 0}, 422),
+        ("put", "/api/settings/target", {"mode": "interview", "retention": 0.5}, 422),
+        ("put", "/api/settings/target", {"mode": "steady", "daily_target": 5}, 422),
     ],
 )
 def test_errors(client: TestClient, seeded, method, path, body, status) -> None:

@@ -1,29 +1,24 @@
 from fastapi import APIRouter, HTTPException
 
-from app.api.deps import Db, local_now
+from app.api.deps import Db
 from app.api.schemas import StudyModeIn, StudyModeOut, TargetIn, TargetOut
-from app.engines.reviews import change_target, current_target
-from app.settings_store import get_study_mode, set_study_mode
+from app.engines.reviews import change_target
+from app.settings_store import get_study_mode, get_target, set_study_mode
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("/target")
-def get_target(db: Db) -> TargetOut:
-    target = current_target(db, local_now().date())
-    db.commit()
-    return TargetOut.model_validate(target)
+def read_target(db: Db) -> TargetOut:
+    return TargetOut.model_validate(get_target(db))
 
 
 @router.put("/target")
 def put_target(body: TargetIn, db: Db) -> TargetOut:
+    """Apply a daily target. Casual/Steady are presets; Interview takes a number/retention."""
     try:
         target = change_target(
-            db,
-            body.mode,
-            daily_target=body.daily_target,
-            retention=body.retention,
-            end_date=body.interview_end_date,
+            db, body.mode, daily_target=body.daily_target, retention=body.retention
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -33,9 +28,6 @@ def put_target(body: TargetIn, db: Db) -> TargetOut:
 
 @router.put("/study-mode")
 def put_study_mode(body: StudyModeIn, db: Db) -> StudyModeOut:
-    set_study_mode(db, body.enabled, body.until if body.enabled else None)
+    set_study_mode(db, body.enabled)
     db.commit()
-    mode = get_study_mode(db)
-    return StudyModeOut(
-        enabled=mode.enabled, until=mode.until, active=mode.active(local_now().date())
-    )
+    return StudyModeOut(enabled=get_study_mode(db).enabled)

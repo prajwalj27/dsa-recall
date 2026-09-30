@@ -1,10 +1,10 @@
-import { Circle } from 'lucide-react'
+import { ChevronRight, Circle, PauseCircle, PlayCircle } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { DifficultyText } from '@/components/difficulty-text'
 import { FirstRun } from '@/components/first-run'
-import { MarkReviewedMenu } from '@/components/mark-reviewed-menu'
+import { ProblemActionsMenu } from '@/components/problem-actions-menu'
 import { LeetCodeLink, ProblemTitle } from '@/components/problem-links'
 import { RatingButtons } from '@/components/rating-buttons'
 import { RecallMeter } from '@/components/recall-meter'
@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -29,8 +30,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { AttemptedItem, DueSection, PendingItem, StudyMode } from '@/lib/api'
+import { problemCount, usePauseActions } from '@/hooks/use-pause-actions'
+import type { AttemptedItem, DueItem, DueSection, PendingItem, StudyMode } from '@/lib/api'
 import { useConfirmAll, useRateSolve, useToday } from '@/lib/queries'
+import { cn } from '@/lib/utils'
 
 export function TodayPage() {
   const { data: today, isPending, isError, error } = useToday()
@@ -53,6 +56,7 @@ export function TodayPage() {
           <RateSection pending={today.pending} studyMode={today.study_mode} />
           <DueList due={today.due} />
           {today.attempted.length ? <AttemptedSection items={today.attempted} /> : null}
+          {today.paused.length ? <PausedSection items={today.paused} /> : null}
         </>
       )}
     </div>
@@ -87,9 +91,10 @@ function RateSection({ pending, studyMode }: { pending: PendingItem[]; studyMode
 
   return (
     <Card>
-      <CardHeader>
+      {/* Narrow cards: study mode drops below the title instead of squeezing it. */}
+      <CardHeader className="@max-md/card-header:grid-cols-1">
         <CardTitle>Rate your new solves{pending.length ? ` (${pending.length})` : ''}</CardTitle>
-        <CardAction>
+        <CardAction className="@max-md/card-header:col-start-1 @max-md/card-header:row-start-2 @max-md/card-header:justify-self-start">
           <StudyModeToggle mode={studyMode} />
         </CardAction>
       </CardHeader>
@@ -157,15 +162,35 @@ function RateSection({ pending, studyMode }: { pending: PendingItem[]; studyMode
 // Laid out by the card's width (container queries), not the window's, since the sidebar takes
 // space. From 672px: header and columns, with Last solved from 768px. Narrower: two-line rows,
 // with difficulty, recall, due and last solved under a title that may wrap.
+// "Select" adds a checkbox column for pausing several problems at once.
 
 const WIDE = 'hidden @2xl:table-cell'
 const TITLE_WRAP = '@max-2xl:line-clamp-2 @max-2xl:whitespace-normal'
 
 function DueList({ due }: { due: DueSection }) {
   const [showAll, setShowAll] = useState(false)
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const { pauseProblems, pending } = usePauseActions()
+
   const targetMet = due.done_today >= due.target
   const visible = showAll ? due.items : due.items.slice(0, due.shown)
   const rolledOver = due.total_due - due.shown
+  const visibleSlugs = visible.map((item) => item.slug)
+  const selectedVisible = visibleSlugs.filter((slug) => selected.has(slug))
+  const allSelected = visible.length > 0 && selectedVisible.length === visible.length
+
+  const toggle = (slug: string, on: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (on) next.add(slug)
+      else next.delete(slug)
+      return next
+    })
+  const stopSelecting = () => {
+    setSelecting(false)
+    setSelected(new Set())
+  }
 
   return (
     <Card>
@@ -176,20 +201,70 @@ function DueList({ due }: { due: DueSection }) {
           {targetMet ? ' · target met' : ''}
           {rolledOver > 0 ? ` · ${rolledOver} more due` : ''}
         </CardDescription>
+        {due.total_due > 0 ? (
+          <CardAction>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={selecting}
+              onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+            >
+              {selecting ? 'Done' : 'Select'}
+            </Button>
+          </CardAction>
+        ) : null}
       </CardHeader>
       <CardContent className="@container flex flex-col gap-2">
         {due.total_due === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing due. Nice.</p>
         ) : (
           <>
+            {selecting ? (
+              <div
+                className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm shadow-sm"
+                role="toolbar"
+                aria-label="Selection"
+              >
+                <span className="text-muted-foreground">
+                  {selectedVisible.length} selected
+                </span>
+                <Button
+                  size="sm"
+                  className="ml-auto"
+                  disabled={selectedVisible.length === 0 || pending}
+                  onClick={() =>
+                    pauseProblems(selectedVisible, problemCount(selectedVisible.length), stopSelecting)
+                  }
+                >
+                  <PauseCircle />
+                  Pause selected ({selectedVisible.length})
+                </Button>
+                <Button variant="ghost" size="sm" onClick={stopSelecting}>
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
             {visible.length ? (
               <Table className={TABLE}>
-                <TableHeader className="hidden @2xl:table-header-group">
+                <TableHeader className={selecting ? '' : 'hidden @2xl:table-header-group'}>
                   <TableRow className={HEAD_ROW}>
-                    <TableHead className={HEAD}>Problem</TableHead>
-                    <TableHead className={`${HEAD} w-20`}>Difficulty</TableHead>
-                    <TableHead className={`${HEAD} w-28 text-right`}>Recall</TableHead>
-                    <TableHead className={`${HEAD} w-36 pl-6`}>Due</TableHead>
+                    {selecting ? (
+                      <TableHead className={`${HEAD} w-10`}>
+                        <Checkbox
+                          aria-label="Select all shown"
+                          checked={allSelected ? true : selectedVisible.length ? 'indeterminate' : false}
+                          onCheckedChange={(on) =>
+                            setSelected(on === true ? new Set(visibleSlugs) : new Set())
+                          }
+                        />
+                      </TableHead>
+                    ) : null}
+                    <TableHead className={HEAD}>
+                      <span className={selecting ? '@max-2xl:sr-only' : ''}>Problem</span>
+                    </TableHead>
+                    <TableHead className={`${HEAD} ${WIDE} w-20`}>Difficulty</TableHead>
+                    <TableHead className={`${HEAD} ${WIDE} w-28 text-right`}>Recall</TableHead>
+                    <TableHead className={`${HEAD} ${WIDE} w-36 pl-6`}>Due</TableHead>
                     <TableHead className={`${HEAD} hidden w-32 @3xl:table-cell`}>
                       Last solved
                     </TableHead>
@@ -200,7 +275,20 @@ function DueList({ due }: { due: DueSection }) {
                 </TableHeader>
                 <TableBody>
                   {visible.map((item) => (
-                    <TableRow key={item.slug} className={ROW}>
+                    <TableRow
+                      key={item.slug}
+                      className={ROW}
+                      data-state={selected.has(item.slug) ? 'selected' : undefined}
+                    >
+                      {selecting ? (
+                        <TableCell className="w-10">
+                          <Checkbox
+                            aria-label={`Select ${item.title}`}
+                            checked={selected.has(item.slug)}
+                            onCheckedChange={(on) => toggle(item.slug, on === true)}
+                          />
+                        </TableCell>
+                      ) : null}
                       <TableCell className="whitespace-normal">
                         <ProblemTitle
                           slug={item.slug}
@@ -235,7 +323,7 @@ function DueList({ due }: { due: DueSection }) {
                       <TableCell className="w-20 max-sm:w-24">
                         <div className="flex justify-end">
                           <LeetCodeLink slug={item.slug} title={item.title} className={ACTIONS} />
-                          <MarkReviewedMenu
+                          <ProblemActionsMenu
                             slug={item.slug}
                             title={item.title}
                             className={ACTIONS}
@@ -332,6 +420,121 @@ function AttemptedSection({ items }: { items: AttemptedItem[] }) {
           </TableBody>
         </Table>
       </CardContent>
+    </Card>
+  )
+}
+
+// --- Paused ---------------------------------------------------------------------------------------
+// Problems taken out of the review queue. Collapsed by default; a re-solve on LeetCode resumes
+// a problem automatically, or resume it here.
+
+function PausedSection({ items }: { items: DueItem[] }) {
+  const [open, setOpen] = useState(false)
+  const { resumeProblems, pending } = usePauseActions()
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 hover:underline focus-visible:underline focus-visible:outline-none"
+            aria-expanded={open}
+            aria-controls="paused-list"
+            onClick={() => setOpen(!open)}
+          >
+            <ChevronRight
+              className={cn('size-4 transition-transform', open && 'rotate-90')}
+              aria-hidden="true"
+            />
+            Paused ({items.length})
+          </button>
+        </CardTitle>
+        <CardDescription>
+          Not in your reviews. Solving one again on LeetCode resumes it automatically.
+        </CardDescription>
+        {open ? (
+          <CardAction>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => resumeProblems({ all: true }, problemCount(items.length))}
+            >
+              Resume all
+            </Button>
+          </CardAction>
+        ) : null}
+      </CardHeader>
+      {open ? (
+        <CardContent id="paused-list" className="@container">
+          <Table className={TABLE}>
+            <TableHeader className="hidden @2xl:table-header-group">
+              <TableRow className={HEAD_ROW}>
+                <TableHead className={HEAD}>Problem</TableHead>
+                <TableHead className={`${HEAD} w-20`}>Difficulty</TableHead>
+                <TableHead className={`${HEAD} w-28 text-right`}>Recall</TableHead>
+                <TableHead className={`${HEAD} hidden w-32 pl-6 @3xl:table-cell`}>
+                  Last solved
+                </TableHead>
+                <TableHead className={`${HEAD} w-28`}>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => (
+                <TableRow key={item.slug} className={ROW}>
+                  <TableCell className="whitespace-normal">
+                    <ProblemTitle
+                      slug={item.slug}
+                      title={item.title}
+                      frontendId={item.frontend_id}
+                      className={TITLE_WRAP}
+                    />
+                    <p className="mt-0.5 text-xs text-muted-foreground @3xl:hidden">
+                      <span className="@2xl:hidden">
+                        <DifficultyText difficulty={item.difficulty} /> ·{' '}
+                        {Math.round(item.recall * 100)}% recall
+                        {item.last_review ? ' · ' : ''}
+                      </span>
+                      {item.last_review ? (
+                        <>
+                          solved <RelativeTime date={item.last_review} />
+                        </>
+                      ) : null}
+                    </p>
+                  </TableCell>
+                  <TableCell className={`${WIDE} w-20`}>
+                    <DifficultyText difficulty={item.difficulty} />
+                  </TableCell>
+                  <TableCell className={`${WIDE} w-28`}>
+                    <RecallMeter recall={item.recall} />
+                  </TableCell>
+                  <TableCell className="hidden w-32 pl-6 text-muted-foreground @3xl:table-cell">
+                    {item.last_review ? <RelativeTime date={item.last_review} /> : '—'}
+                  </TableCell>
+                  <TableCell className="w-28">
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={pending}
+                        className="text-muted-foreground group-hover:text-foreground group-focus-within:text-foreground"
+                        aria-label={`Resume reviews for ${item.title}`}
+                        onClick={() => resumeProblems({ slugs: [item.slug] }, item.title)}
+                      >
+                        <PlayCircle />
+                        Resume
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      ) : null}
     </Card>
   )
 }

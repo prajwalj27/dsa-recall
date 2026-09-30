@@ -38,7 +38,7 @@ export type Health = { status: string; version: string; env: 'dev' | 'prod'; dat
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard'
 export type Choice = 'again' | 'hard' | 'good' | 'easy' | 'saw_solution'
-export type TargetMode = 'casual' | 'steady' | 'interview' | 'custom'
+export type TargetMode = 'casual' | 'steady' | 'interview'
 
 // --- Today --------------------------------------------------------------------------------
 
@@ -81,14 +81,14 @@ export type AttemptedItem = {
   last_submitted_at: string | null
 }
 
-export type StudyMode = { enabled: boolean; until: string | null; active: boolean }
+export type StudyMode = { enabled: boolean }
 
 export type Target = {
   mode: TargetMode
   daily_target: number
   retention: number
-  interview_end_date: string | null
-  previous_mode: TargetMode | null
+  interview_target: number // Interview's saved values, to pre-fill the form
+  interview_retention: number
 }
 
 export type Today = {
@@ -97,6 +97,7 @@ export type Today = {
   attempted: AttemptedItem[]
   study_mode: StudyMode
   target: Target
+  paused: DueItem[] // out of the review queue; most recently solved first
   backfill_done: boolean
 }
 
@@ -118,7 +119,7 @@ export type ProblemDetail = {
     recall: number
     reps: number
     lapses: number
-    suspended: boolean
+    paused: boolean
     last_review: string | null
   } | null
   timeline: TimelineEntry[]
@@ -172,14 +173,15 @@ export const endpoints = {
     send('POST', `/solves/${solveId}/rating`, { choice }),
   confirmAll: (solveIds: number[]) =>
     send<{ confirmed: number }>('POST', '/solves/confirm', { solve_ids: solveIds }),
+  pause: (slugs: string[]) => send<{ changed: number }>('POST', '/problems/pause', { slugs }),
+  resume: (target: { slugs: string[] } | { all: true }) =>
+    send<{ changed: number }>('POST', '/problems/resume', target),
   putTarget: (body: {
     mode: TargetMode
     daily_target?: number
     retention?: number
-    interview_end_date?: string | null
   }) => send<Target>('PUT', '/settings/target', body),
-  putStudyMode: (enabled: boolean, until: string | null) =>
-    send<StudyMode>('PUT', '/settings/study-mode', { enabled, until }),
+  putStudyMode: (enabled: boolean) => send<StudyMode>('PUT', '/settings/study-mode', { enabled }),
   syncStatus: () => api<SyncStatus>('/sync/status'),
   startSync: () => send<SyncStatus>('POST', '/sync', {}),
 }

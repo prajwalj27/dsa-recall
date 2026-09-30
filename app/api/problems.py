@@ -1,9 +1,25 @@
 from fastapi import APIRouter, HTTPException
 
 from app.api.deps import Db
-from app.api.schemas import CardOut, ChoiceIn, ProblemDetailOut, ProblemOut, TimelineEntryOut
+from app.api.schemas import (
+    CardOut,
+    ChangedOut,
+    ChoiceIn,
+    PauseIn,
+    ProblemDetailOut,
+    ProblemOut,
+    ResumeIn,
+    TimelineEntryOut,
+)
 from app.db.models import Card, Problem
-from app.engines.reviews import mark_reviewed, problem_timeline, recall
+from app.engines.reviews import (
+    mark_reviewed,
+    pause,
+    problem_timeline,
+    recall,
+    resume,
+    resume_all,
+)
 from app.timeutil import as_utc
 
 router = APIRouter(prefix="/problems", tags=["problems"])
@@ -21,9 +37,24 @@ def card_out(card: Card | None) -> CardOut | None:
         recall=recall(card),
         reps=card.reps,
         lapses=card.lapses,
-        suspended=card.suspended,
+        paused=card.suspended,
         last_review=as_utc(card.last_review) if card.last_review else None,
     )
+
+
+@router.post("/pause")
+def pause_problems(body: PauseIn, db: Db) -> ChangedOut:
+    """Take problems out of the review queue until resumed or solved again."""
+    changed = pause(db, body.slugs)
+    db.commit()
+    return ChangedOut(changed=changed)
+
+
+@router.post("/resume")
+def resume_problems(body: ResumeIn, db: Db) -> ChangedOut:
+    changed = resume_all(db) if body.all else resume(db, body.slugs)
+    db.commit()
+    return ChangedOut(changed=changed)
 
 
 @router.get("/{slug}")

@@ -1,10 +1,10 @@
 """Response and request models for the UI API. Timestamps are ISO 8601 UTC; the frontend
 formats durations ("3 days ago") itself."""
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.engines.reviews import Choice
 
@@ -57,16 +57,14 @@ class AttemptedItem(BaseModel):
 
 class StudyModeOut(BaseModel):
     enabled: bool
-    until: date | None
-    active: bool  # enabled and not past `until`
 
 
 class TargetOut(Out):
     mode: str
     daily_target: int
     retention: float
-    interview_end_date: date | None
-    previous_mode: str | None
+    interview_target: int  # Interview's saved values (to pre-fill the form)
+    interview_retention: float
 
 
 class TodayOut(BaseModel):
@@ -75,6 +73,7 @@ class TodayOut(BaseModel):
     attempted: list[AttemptedItem]
     study_mode: StudyModeOut
     target: TargetOut
+    paused: list[DueItem]  # most recently solved first
     backfill_done: bool
 
 
@@ -102,7 +101,7 @@ class CardOut(Out):
     recall: float
     reps: int
     lapses: int
-    suspended: bool
+    paused: bool  # out of the review queue until resumed or re-solved
     last_review: datetime | None
 
 
@@ -137,17 +136,38 @@ class ChoiceIn(BaseModel):
     choice: Choice
 
 
+class PauseIn(BaseModel):
+    slugs: list[str] = Field(min_length=1)
+
+
+class ResumeIn(BaseModel):
+    """Either specific problems, or `all: true` for every paused problem."""
+
+    slugs: list[str] = []
+    all: bool = False
+
+    @model_validator(mode="after")
+    def _one_of(self) -> "ResumeIn":
+        if not self.all and not self.slugs:
+            raise ValueError("give slugs, or all: true")
+        return self
+
+
+class ChangedOut(BaseModel):
+    changed: int
+
+
 class ConfirmIn(BaseModel):
     solve_ids: list[int] = Field(min_length=1)
 
 
 class TargetIn(BaseModel):
-    mode: Literal["casual", "steady", "interview", "custom"]
+    """Casual and Steady take no values; Interview takes a number and/or a retention."""
+
+    mode: Literal["casual", "steady", "interview"]
     daily_target: int | None = Field(default=None, ge=1, le=100)
     retention: float | None = Field(default=None, ge=0.70, le=0.97)
-    interview_end_date: date | None = None
 
 
 class StudyModeIn(BaseModel):
     enabled: bool
-    until: date | None = None

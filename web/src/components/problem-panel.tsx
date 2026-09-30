@@ -1,8 +1,8 @@
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, PauseCircle, PlayCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { DifficultyText } from '@/components/difficulty-text'
-import { MarkReviewedMenu } from '@/components/mark-reviewed-menu'
+import { ProblemActionsMenu } from '@/components/problem-actions-menu'
 import { RatingButtons } from '@/components/rating-buttons'
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +15,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { usePauseActions } from '@/hooks/use-pause-actions'
 import { useProblemPanel } from '@/hooks/use-problem-panel'
 import type { ProblemDetail, TimelineEntry } from '@/lib/api'
 import { CHOICE_LABEL } from '@/lib/choices'
@@ -97,9 +98,22 @@ function PanelBody({ detail }: { detail: ProblemDetail }) {
             Review
           </h3>
           {card ? (
-            <MarkReviewedMenu slug={problem.slug} title={problem.title} trigger="button" />
+            <div className="flex flex-wrap justify-end gap-2">
+              <PauseToggle slug={problem.slug} title={problem.title} paused={card.paused} />
+              <ProblemActionsMenu
+                slug={problem.slug}
+                title={problem.title}
+                trigger="button"
+                showPause={false}
+              />
+            </div>
           ) : null}
         </div>
+        {card?.paused ? (
+          <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+            Paused: not in your review queue. Solving it again resumes it.
+          </p>
+        ) : null}
         {card ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Next review</dt>
@@ -132,6 +146,26 @@ function PanelBody({ detail }: { detail: ProblemDetail }) {
         </ol>
       </section>
     </>
+  )
+}
+
+function PauseToggle({ slug, title, paused }: { slug: string; title: string; paused: boolean }) {
+  const { pauseProblems, resumeProblems, pending } = usePauseActions()
+  return paused ? (
+    <Button size="sm" disabled={pending} onClick={() => resumeProblems({ slugs: [slug] }, title)}>
+      <PlayCircle />
+      Resume reviews
+    </Button>
+  ) : (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={() => pauseProblems([slug], title)}
+    >
+      <PauseCircle />
+      Pause reviews
+    </Button>
   )
 }
 

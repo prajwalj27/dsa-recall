@@ -1,15 +1,14 @@
 """Engine pieces behind the Today screen: priority, done-today, timeline, target modes."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 
-from app.db.models import Card
+from app.db.models import Card, Setting
 from app.engines.reviews import (
     Choice,
     change_target,
     confirm_defaults,
-    current_target,
     due_reviews,
     mark_reviewed,
     pending_ratings,
@@ -107,6 +106,7 @@ def test_confirm_defaults_accepts_pending_only(session) -> None:
 
 
 # --- Target modes ---------------------------------------------------------------------------
+# Casual and Steady are fixed presets; Interview is the one adjustable mode.
 
 
 def test_default_target_is_steady(session) -> None:
@@ -114,45 +114,82 @@ def test_default_target_is_steady(session) -> None:
     assert (target.mode, target.daily_target, target.retention) == ("steady", 8, 0.90)
 
 
-def test_mode_sets_default_number_and_number_is_adjustable(session) -> None:
-    assert change_target(session, "casual").daily_target == 5
-    assert change_target(session, "casual", daily_target=4).daily_target == 4
-    assert change_target(session, "casual").daily_target == 4  # same mode keeps the number
+def test_presets_are_fixed(session) -> None:
+    assert (change_target(session, "casual").daily_target, get_target(session).retention) == (
+        5,
+        0.90,
+    )
     assert change_target(session, "steady").daily_target == 8
+    for kwargs in ({"daily_target": 4}, {"retention": 0.85}):
+        with pytest.raises(ValueError, match="fixed values"):
+            change_target(session, "casual", **kwargs)
 
 
-def test_interview_prep_raises_retention_and_rebuilds_cards(session) -> None:
+def test_interview_defaults_raise_retention_and_rebuild_cards(session) -> None:
     add_problem(session, "p")
     add_solve(session, "p", NOW - timedelta(days=30))
     schedule_new_solves(session, NOW)
     steady_due = session.get(Card, "p").due
 
-    target = change_target(session, "interview", end_date=date(2026, 10, 15))
+    target = change_target(session, "interview")
 
-    assert (target.retention, target.daily_target, target.previous_mode) == (0.95, 15, "steady")
+    assert (target.mode, target.daily_target, target.retention) == ("interview", 15, 0.95)
     assert session.get(Card, "p").due < steady_due  # higher retention: sooner reviews
 
 
-def test_interview_prep_reverts_after_end_date(session) -> None:
-    change_target(session, "casual")
-    change_target(session, "interview", end_date=date(2026, 10, 15))
-
-    assert current_target(session, date(2026, 10, 15)).mode == "interview"
-    after = current_target(session, date(2026, 10, 16))
-    assert (after.mode, after.retention, after.interview_end_date) == ("casual", 0.90, None)
-
-
-def test_custom_mode_takes_retention(session) -> None:
-    target = change_target(session, "custom", daily_target=12, retention=0.85)
+def test_interview_takes_number_and_retention_and_remembers_them(session) -> None:
+    target = change_target(session, "interview", daily_target=12, retention=0.85)
     assert (target.daily_target, target.retention) == (12, 0.85)
+
+    change_target(session, "steady")
+    steady = get_target(session)
+    assert (steady.daily_target, steady.retention) == (8, 0.90)
+    assert (steady.interview_target, steady.interview_retention) == (12, 0.85)  # for the form
+
+    back = change_target(session, "interview")
+    assert (back.daily_target, back.retention) == (12, 0.85)
+
+
+def test_interview_partial_update_keeps_the_other_value(session) -> None:
+    change_target(session, "interview", daily_target=12, retention=0.85)
+    target = change_target(session, "interview", daily_target=20)
+    assert (target.daily_target, target.retention) == (20, 0.85)
+
+
+def _put(session, key: str, value) -> None:
+    session.merge(Setting(key=key, value=value))
+    session.flush()
+
+
+def test_legacy_custom_mode_reads_as_interview(session) -> None:
+    _put(session, "target_mode", "custom")
+    _put(session, "daily_target", 12)
+    _put(session, "desired_retention", 0.85)
+
+    target = get_target(session)
+
+    assert (target.mode, target.daily_target, target.retention) == ("interview", 12, 0.85)
+    assert (target.interview_target, target.interview_retention) == (12, 0.85)
+
+
+def test_legacy_end_date_keys_are_removed_on_save(session) -> None:
+    _put(session, "target_mode", "interview")
+    _put(session, "interview_end_date", "2026-10-10")
+    _put(session, "previous_mode", "custom")
+
+    change_target(session, "steady")
+
+    assert session.get(Setting, "interview_end_date") is None
+    assert session.get(Setting, "previous_mode") is None
 
 
 @pytest.mark.parametrize("kwargs", [{"daily_target": 0}, {"daily_target": 101}, {"retention": 0.5}])
-def test_invalid_target_values(session, kwargs) -> None:
+def test_invalid_interview_values(session, kwargs) -> None:
     with pytest.raises(ValueError):
-        change_target(session, "custom", **kwargs)
+        change_target(session, "interview", **kwargs)
 
 
-def test_unknown_mode(session) -> None:
+@pytest.mark.parametrize("mode", ["hardcore", "custom"])
+def test_unknown_mode(session, mode) -> None:
     with pytest.raises(ValueError):
-        change_target(session, "hardcore")
+        change_target(session, mode)

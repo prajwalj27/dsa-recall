@@ -75,6 +75,17 @@ export function useMarkReviewed() {
   })
 }
 
+/** Take problems out of the review queue until resumed or solved again. */
+export function usePause() {
+  const invalidate = useInvalidateReviews()
+  return useMutation({ mutationFn: endpoints.pause, onSuccess: invalidate })
+}
+
+export function useResume() {
+  const invalidate = useInvalidateReviews()
+  return useMutation({ mutationFn: endpoints.resume, onSuccess: invalidate })
+}
+
 export function useSetTarget() {
   const invalidate = useInvalidateReviews()
   return useMutation({
@@ -82,7 +93,6 @@ export function useSetTarget() {
       mode: TargetMode
       daily_target?: number
       retention?: number
-      interview_end_date?: string | null
     }) => endpoints.putTarget(body),
     onSuccess: invalidate, // retention changes reschedule every card
   })
@@ -91,8 +101,7 @@ export function useSetTarget() {
 export function useSetStudyMode() {
   const invalidate = useInvalidateReviews()
   return useMutation({
-    mutationFn: ({ enabled, until }: { enabled: boolean; until: string | null }) =>
-      endpoints.putStudyMode(enabled, until),
+    mutationFn: (enabled: boolean) => endpoints.putStudyMode(enabled),
     onSuccess: invalidate,
   })
 }

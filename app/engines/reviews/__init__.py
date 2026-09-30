@@ -9,8 +9,9 @@ problem) and no fuzzing (so replays are deterministic).
 """
 
 from bisect import bisect_left
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -26,7 +27,6 @@ from app.settings_store import (
     desired_retention,
     get_study_mode,
     get_target,
-    revert_expired_interview,
     set_target,
 )
 from app.sync.solves import MERGE_WINDOW
@@ -146,13 +146,6 @@ def change_target(session: Session, mode: str, **kwargs: Any) -> Target:
     return get_target(session)
 
 
-def current_target(session: Session, today: date) -> Target:
-    """The daily target, first ending Interview prep if its end date has passed."""
-    if revert_expired_interview(session, today):
-        rebuild_all(session)
-    return get_target(session)
-
-
 # --- Scheduling solves -------------------------------------------------------------------
 
 
@@ -162,7 +155,7 @@ def schedule_new_solves(session: Session, now: datetime | None = None) -> int:
     Called after each sync. Idempotent: solves already in review_log are left alone.
     """
     now = now or utc_now()
-    study_mode_on = get_study_mode(session).active(now.date())
+    study_mode_on = get_study_mode(session).enabled
     unscheduled = session.scalars(
         select(Solve)
         .outerjoin(ReviewLog, ReviewLog.solve_id == Solve.id)
@@ -194,6 +187,8 @@ def schedule_new_solves(session: Session, now: datetime | None = None) -> int:
     scheduler = make_scheduler(desired_retention(session))
     for slug in {solve.slug for solve in unscheduled}:
         rebuild_card(session, slug, scheduler)
+    # Solving a paused problem again brings it back (history from the backfill doesn't).
+    resume(session, {s.slug for s in unscheduled if s.rating_source != HISTORY})
     return len(unscheduled)
 
 
@@ -247,7 +242,39 @@ def mark_reviewed(
         ReviewLog(slug=slug, rating=int(RATING_OF[choice]), reviewed_at=utc_naive(at or utc_now()))
     )
     session.flush()
+    resume(session, [slug])  # a re-solve done elsewhere also un-pauses
     return rebuild_card(session, slug)
+
+
+# --- Paused problems ---------------------------------------------------------------------------
+# Paused cards (stored as `cards.suspended`) stay out of the due queue until the user resumes
+# them or solves the problem again. History and scheduling are untouched.
+
+
+def _set_paused(session: Session, slugs: Iterable[str], paused: bool) -> int:
+    slugs = set(slugs)
+    if not slugs:
+        return 0
+    cards = session.scalars(
+        select(Card).where(Card.slug.in_(slugs), Card.suspended.is_(not paused))
+    ).all()
+    for card in cards:
+        card.suspended = paused
+    session.flush()
+    return len(cards)
+
+
+def pause(session: Session, slugs: Iterable[str]) -> int:
+    """Take problems out of the review queue. Returns how many changed (card-less are ignored)."""
+    return _set_paused(session, slugs, True)
+
+
+def resume(session: Session, slugs: Iterable[str]) -> int:
+    return _set_paused(session, slugs, False)
+
+
+def resume_all(session: Session) -> int:
+    return resume(session, session.scalars(select(Card.slug).where(Card.suspended.is_(True))))
 
 
 # --- Queries for the UI ----------------------------------------------------------------------
@@ -291,16 +318,12 @@ class DueReview:
     last_review: datetime | None = None  # last solved (re-solve or manual review)
 
 
-def due_reviews(
-    session: Session, now: datetime | None = None, limit: int | None = None
-) -> list[DueReview]:
-    """Cards due now (not suspended), highest priority first."""
-    now = now or utc_now()
+def _review_items(session: Session, now: datetime, *conditions: Any) -> list[DueReview]:
     scheduler = make_scheduler(desired_retention(session))
     rows = session.execute(
         select(Card, Problem.title, Problem.difficulty, Problem.frontend_id)
         .join(Problem, Problem.slug == Card.slug)
-        .where(Card.suspended.is_(False), Card.due <= utc_naive(now))
+        .where(*conditions)
     ).all()
     items = []
     for card, title, difficulty, frontend_id in rows:
@@ -317,8 +340,25 @@ def due_reviews(
                 last_review=as_utc(card.last_review) if card.last_review else None,
             )
         )
+    return items
+
+
+def due_reviews(
+    session: Session, now: datetime | None = None, limit: int | None = None
+) -> list[DueReview]:
+    """Cards due now (not paused), highest priority first."""
+    now = now or utc_now()
+    items = _review_items(session, now, Card.suspended.is_(False), Card.due <= utc_naive(now))
     items.sort(key=lambda item: (-item.priority, item.slug))
     return items[:limit] if limit is not None else items
+
+
+def paused_problems(session: Session, now: datetime | None = None) -> list[DueReview]:
+    """Paused cards, most recently solved first."""
+    items = _review_items(session, now or utc_now(), Card.suspended.is_(True))
+    epoch = datetime.min.replace(tzinfo=UTC)
+    items.sort(key=lambda item: (item.last_review or epoch, item.slug), reverse=True)
+    return items
 
 
 def reviews_done_today(session: Session, day_start: datetime) -> int:

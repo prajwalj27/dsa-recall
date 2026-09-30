@@ -12,8 +12,13 @@ from app.api.schemas import (
     TodayOut,
 )
 from app.db.models import Problem, Submission
-from app.engines.reviews import current_target, due_reviews, pending_ratings, reviews_done_today
-from app.settings_store import get_study_mode
+from app.engines.reviews import (
+    due_reviews,
+    paused_problems,
+    pending_ratings,
+    reviews_done_today,
+)
+from app.settings_store import get_study_mode, get_target
 from app.sync.engine import get_state
 from app.timeutil import as_utc
 
@@ -23,7 +28,7 @@ router = APIRouter(tags=["today"])
 @router.get("/today")
 def today(db: Db) -> TodayOut:
     now = local_now()
-    target = current_target(db, now.date())  # may end an expired Interview prep
+    target = get_target(db)
     due = due_reviews(db, now)
     done = reviews_done_today(db, local_day_start(now))
     study = get_study_mode(db)
@@ -37,10 +42,9 @@ def today(db: Db) -> TodayOut:
             target=target.daily_target,
         ),
         attempted=_attempted(db),
-        study_mode=StudyModeOut(
-            enabled=study.enabled, until=study.until, active=study.active(now.date())
-        ),
+        study_mode=StudyModeOut(enabled=study.enabled),
         target=TargetOut.model_validate(target),
+        paused=[DueItem.model_validate(p) for p in paused_problems(db, now)],
         backfill_done=bool(get_state(db, "backfill_done", False)),
     )
     db.commit()

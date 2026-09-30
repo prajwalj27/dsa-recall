@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 
 from app.db.models import Card, Problem, ReviewLog, Solve, Submission
-from app.engines.reviews import pending_ratings
+from app.engines.reviews import pause, pending_ratings
 from app.leetcode import RateLimitedError
 from app.sync.engine import get_state, run_sync
 from app.sync.progress import ErrorKind, RunState
@@ -177,3 +177,16 @@ def test_solves_committed_before_a_failure_still_get_cards(session_factory, fake
     assert progress.scheduled == 1
     with session_factory() as s:
         assert s.scalars(select(Card.slug)).all() == ["walls-and-gates"]
+
+
+def test_solving_a_paused_problem_again_resumes_it(session_factory, fake) -> None:
+    run_sync(session_factory, fake)
+    with session_factory() as s, s.begin():
+        assert pause(s, ["two-sum"]) == 1
+    fake.add("two-sum", FakeSub(106, "Accepted", day(60)))
+
+    run_sync(session_factory, fake)
+
+    with session_factory() as s:
+        assert s.get(Card, "two-sum").suspended is False
+        assert [p.slug for p in pending_ratings(s)] == ["two-sum"]
