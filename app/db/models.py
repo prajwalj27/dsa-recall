@@ -31,8 +31,17 @@ class Problem(Base):
     ac_rate: Mapped[float | None]
     topic_tags: Mapped[list[Any]] = mapped_column(default=list)
     similar_questions: Mapped[list[Any]] = mapped_column(default=list)
-    statement: Mapped[str | None] = mapped_column(Text)
-    fetched_at: Mapped[datetime | None]
+    statement: Mapped[str | None] = mapped_column(Text)  # HTML; None for paid-only
+    fetched_at: Mapped[datetime | None]  # when question details were fetched
+    frontend_id: Mapped[str | None]
+    is_paid_only: Mapped[bool] = mapped_column(default=False, server_default="0")
+
+    # Sync markers from LeetCode's progress list. A problem whose stored markers equal the
+    # remote ones is fully synced; they are written in the same transaction as its submissions.
+    question_status: Mapped[str | None]  # SOLVED / ATTEMPTED
+    last_result: Mapped[str | None]  # AC / WA / TLE / ...
+    last_submitted_at: Mapped[datetime | None]
+    num_submitted: Mapped[int | None]
 
 
 class Submission(Base):
