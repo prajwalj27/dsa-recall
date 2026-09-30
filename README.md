@@ -25,7 +25,7 @@ pip install -e ".[dev]"
 npm install --prefix web
 
 # Config
-copy .env.example .env   # then fill in your LeetCode cookie and LLM settings
+cp .env.example .env   # then fill in your LeetCode cookie and LLM settings
 ```
 
 ## Run
