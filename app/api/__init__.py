@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.api import health, sync
+from app.api import health, problems, settings, solves, sync, today
 
 api_router = APIRouter()
-api_router.include_router(health.router)
-api_router.include_router(sync.router)
+for module in (health, sync, today, problems, solves, settings):
+    api_router.include_router(module.router)

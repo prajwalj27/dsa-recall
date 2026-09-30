@@ -1,7 +1,10 @@
-import { ChartLine, House, ListChecks, Network, RefreshCw, Settings } from 'lucide-react'
+import { ChartLine, House, ListChecks, Network, Settings } from 'lucide-react'
+import { useEffect } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 
-import { Button } from '@/components/ui/button'
+import { ProblemPanel } from '@/components/problem-panel'
+import { SyncBanner } from '@/components/sync-banner'
+import { SyncControl } from '@/components/sync-control'
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +19,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
+import { useToday } from '@/lib/queries'
 
 const NAV = [
   { to: '/', label: 'Today', icon: House },
@@ -27,7 +31,13 @@ const NAV = [
 
 export function AppLayout() {
   const { pathname } = useLocation()
-  const dueCount = 0 // TODO: from the reviews API (build step 1)
+  const { data: today } = useToday()
+  const dueCount = today?.due.total_due ?? 0
+
+  // The due count in the tab title (design doc: always visible).
+  useEffect(() => {
+    document.title = dueCount > 0 ? `(${dueCount}) DSA Recall` : 'DSA Recall'
+  }, [dueCount])
 
   return (
     <SidebarProvider>
@@ -45,7 +55,9 @@ export function AppLayout() {
                         <span>{label}</span>
                       </NavLink>
                     </SidebarMenuButton>
-                    {to === '/' && dueCount > 0 && <SidebarMenuBadge>{dueCount}</SidebarMenuBadge>}
+                    {to === '/' && dueCount > 0 ? (
+                      <SidebarMenuBadge aria-label={`${dueCount} due`}>{dueCount}</SidebarMenuBadge>
+                    ) : null}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
@@ -56,18 +68,16 @@ export function AppLayout() {
       <SidebarInset>
         <header className="flex h-14 items-center gap-2 border-b px-4">
           <SidebarTrigger />
-          <div className="ml-auto flex items-center gap-3 text-sm text-muted-foreground">
-            <span>Last synced: never</span>
-            <Button size="sm" variant="outline" disabled>
-              <RefreshCw />
-              Sync
-            </Button>
+          <div className="ml-auto">
+            <SyncControl />
           </div>
         </header>
-        <main className="flex-1 p-6">
+        <SyncBanner />
+        <main className="flex-1 p-4 sm:p-6">
           <Outlet />
         </main>
       </SidebarInset>
+      <ProblemPanel />
     </SidebarProvider>
   )
 }

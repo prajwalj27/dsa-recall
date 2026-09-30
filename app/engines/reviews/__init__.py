@@ -8,17 +8,28 @@ The scheduler has no learning steps (minute-level steps suit flashcards, not re-
 problem) and no fuzzing (so replays are deterministic).
 """
 
+from bisect import bisect_left
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
+from typing import Any, Literal
 
 import fsrs
 from fsrs import Rating, Scheduler, State
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
-from app.db.models import Card, Problem, ReviewLog, Solve
-from app.settings_store import DEFAULT_RETENTION, desired_retention, get_study_mode
+from app.db.models import Card, Problem, ReviewLog, Solve, Submission
+from app.settings_store import (
+    DEFAULT_RETENTION,
+    Target,
+    desired_retention,
+    get_study_mode,
+    get_target,
+    revert_expired_interview,
+    set_target,
+)
+from app.sync.solves import MERGE_WINDOW
 from app.timeutil import as_utc, utc_naive, utc_now
 
 HISTORY = "history"  # from the first backfill; inferred silently
@@ -128,6 +139,20 @@ def rebuild_all(session: Session) -> int:
     return len(slugs)
 
 
+def change_target(session: Session, mode: str, **kwargs: Any) -> Target:
+    """`settings_store.set_target`, rebuilding cards if retention changed."""
+    if set_target(session, mode, **kwargs):
+        rebuild_all(session)
+    return get_target(session)
+
+
+def current_target(session: Session, today: date) -> Target:
+    """The daily target, first ending Interview prep if its end date has passed."""
+    if revert_expired_interview(session, today):
+        rebuild_all(session)
+    return get_target(session)
+
+
 # --- Scheduling solves -------------------------------------------------------------------
 
 
@@ -199,6 +224,19 @@ def set_rating(session: Session, solve_id: int, choice: Choice) -> Card | None:
     return rebuild_card(session, solve.slug)
 
 
+def confirm_defaults(session: Session, solve_ids: list[int]) -> int:
+    """Accept the pre-selected rating of pending solves ("Confirm all"). Others are skipped."""
+    confirmed = 0
+    for solve_id in solve_ids:
+        solve = session.get(Solve, solve_id)
+        if solve is None or solve.rating_source != INFERRED:
+            continue
+        default = choice_of(solve) or Choice(infer_rating(solve.wrong_before_ac).name.lower())
+        set_rating(session, solve_id, default)
+        confirmed += 1
+    return confirmed
+
+
 def mark_reviewed(
     session: Session, slug: str, choice: Choice, at: datetime | None = None
 ) -> Card | None:
@@ -228,6 +266,19 @@ def recall(card: Card, now: datetime | None = None, scheduler: Scheduler | None 
     return scheduler.get_card_retrievability(fsrs_card, now or utc_now())
 
 
+# Also the mastery formula's difficulty weights (design doc), so queue and skills agree.
+DIFFICULTY_WEIGHT = {"Easy": 1.0, "Medium": 1.5, "Hard": 2.0}
+
+
+def priority(recall_probability: float, difficulty: str) -> float:
+    """Queue priority: how forgotten, weighted by difficulty. Higher comes first.
+
+    Harder problems win among equally forgotten cards, but a nearly forgotten Easy
+    still beats a well-remembered Medium.
+    """
+    return (1.0 - recall_probability) * DIFFICULTY_WEIGHT.get(difficulty, 1.0)
+
+
 @dataclass(frozen=True)
 class DueReview:
     slug: str
@@ -235,13 +286,13 @@ class DueReview:
     difficulty: str
     due: datetime
     recall: float
-    days_overdue: int
+    priority: float
 
 
 def due_reviews(
     session: Session, now: datetime | None = None, limit: int | None = None
 ) -> list[DueReview]:
-    """Cards due now (not suspended), lowest recall first."""
+    """Cards due now (not suspended), highest priority first."""
     now = now or utc_now()
     scheduler = make_scheduler(desired_retention(session))
     rows = session.execute(
@@ -249,19 +300,119 @@ def due_reviews(
         .join(Problem, Problem.slug == Card.slug)
         .where(Card.suspended.is_(False), Card.due <= utc_naive(now))
     ).all()
-    items = [
-        DueReview(
-            slug=card.slug,
-            title=title,
-            difficulty=difficulty,
-            due=as_utc(card.due),
-            recall=recall(card, now, scheduler),
-            days_overdue=(now - as_utc(card.due)).days,
+    items = []
+    for card, title, difficulty in rows:
+        r = recall(card, now, scheduler)
+        items.append(
+            DueReview(
+                slug=card.slug,
+                title=title,
+                difficulty=difficulty,
+                due=as_utc(card.due),
+                recall=r,
+                priority=priority(r, difficulty),
+            )
         )
-        for card, title, difficulty in rows
-    ]
-    items.sort(key=lambda item: (item.recall, item.slug))
+    items.sort(key=lambda item: (-item.priority, item.slug))
     return items[:limit] if limit is not None else items
+
+
+def reviews_done_today(session: Session, day_start: datetime) -> int:
+    """Problems reviewed since `day_start` that already had a card (re-solves, manual reviews).
+
+    First solves don't count: the daily target counts reviews only.
+    """
+    earlier = aliased(ReviewLog)
+    had_card_before = (
+        select(earlier.id)
+        .where(earlier.slug == ReviewLog.slug, earlier.reviewed_at < ReviewLog.reviewed_at)
+        .exists()
+    )
+    return session.scalar(
+        select(func.count(ReviewLog.slug.distinct())).where(
+            ReviewLog.reviewed_at >= utc_naive(day_start), had_card_before
+        )
+    )
+
+
+@dataclass(frozen=True)
+class TimelineSubmission:
+    id: int
+    status: str
+    lang: str
+    runtime_ms: int | None
+    at: datetime
+
+
+@dataclass(frozen=True)
+class TimelineEntry:
+    """One event in a problem's history, newest first in `problem_timeline`."""
+
+    kind: Literal["solve", "review", "attempts"]  # attempts = failures since the last solve
+    at: datetime
+    solve_id: int | None = None
+    wrong_before_ac: int | None = None
+    choice: Choice | None = None
+    rating_source: str | None = None  # solves only
+    # Solves: the attempts leading up to the accept, the accept, and any merged follow-up
+    # accepts. Attempts: the failures since the last solve.
+    submissions: tuple[TimelineSubmission, ...] = ()
+
+
+def problem_timeline(session: Session, slug: str) -> list[TimelineEntry]:
+    solves = session.scalars(
+        select(Solve).where(Solve.slug == slug).order_by(Solve.accepted_at)
+    ).all()
+    submissions = session.scalars(
+        select(Submission).where(Submission.slug == slug).order_by(Submission.timestamp)
+    ).all()
+    accepted = [s.accepted_at for s in solves]
+
+    # Each submission belongs to the solve it led up to, or (within the merge window)
+    # the solve it followed; failures after the last solve are open attempts.
+    groups: list[list[TimelineSubmission]] = [[] for _ in solves]
+    trailing: list[TimelineSubmission] = []
+    for sub in submissions:
+        item = TimelineSubmission(
+            sub.submission_id, sub.status, sub.lang, sub.runtime_ms, as_utc(sub.timestamp)
+        )
+        j = bisect_left(accepted, sub.timestamp)
+        if j > 0 and sub.timestamp < accepted[j - 1] + MERGE_WINDOW:
+            groups[j - 1].append(item)
+        elif j < len(solves):
+            groups[j].append(item)
+        else:
+            trailing.append(item)
+
+    entries = [
+        TimelineEntry(
+            kind="solve",
+            at=as_utc(solve.accepted_at),
+            solve_id=solve.id,
+            wrong_before_ac=solve.wrong_before_ac,
+            choice=choice_of(solve),
+            rating_source=solve.rating_source,
+            submissions=tuple(group),
+        )
+        for solve, group in zip(solves, groups, strict=True)
+    ]
+    manual = session.scalars(
+        select(ReviewLog).where(ReviewLog.slug == slug, ReviewLog.solve_id.is_(None))
+    ).all()
+    entries += [
+        TimelineEntry(kind="review", at=as_utc(row.reviewed_at), choice=_choice_of_rating(row))
+        for row in manual
+    ]
+    if trailing:
+        entries.append(
+            TimelineEntry(kind="attempts", at=trailing[-1].at, submissions=tuple(trailing))
+        )
+    entries.sort(key=lambda e: e.at, reverse=True)
+    return entries
+
+
+def _choice_of_rating(row: ReviewLog) -> Choice:
+    return Choice(Rating(row.rating).name.lower())
 
 
 @dataclass(frozen=True)

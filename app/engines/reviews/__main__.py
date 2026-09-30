@@ -27,6 +27,7 @@ from app.engines.reviews import (
     set_rating,
 )
 from app.settings_store import get_study_mode, set_study_mode
+from app.timeutil import utc_now
 
 CHOICES = {"again": Choice.AGAIN, "hard": Choice.HARD, "good": Choice.GOOD, "easy": Choice.EASY}
 CHOICES["saw"] = Choice.SAW_SOLUTION
@@ -68,7 +69,8 @@ def main() -> int:
                 total_cards = session.scalar(select(func.count()).select_from(Card))
                 print(f"{len(items)} of {total_cards} problems due for review")
                 for item in items[: args.limit]:
-                    overdue = f"{item.days_overdue}d overdue" if item.days_overdue else "due today"
+                    days = (utc_now() - item.due).days
+                    overdue = f"{days}d overdue" if days else "due today"
                     print(f"  {item.recall:>4.0%}  {overdue:>13}  {item.title} ({item.difficulty})")
             case "pending":
                 items = pending_ratings(session)

@@ -40,3 +40,10 @@ def session_factory(db_path: Path) -> Callable[[], Session]:
     """A migrated temp DB; call it to get a session."""
     upgrade_to_head(get_settings().database_url)
     return get_sessionmaker()
+
+
+@pytest.fixture
+def session(session_factory) -> Iterator[Session]:
+    """A session in an open transaction on the migrated temp DB."""
+    with session_factory() as s, s.begin():
+        yield s

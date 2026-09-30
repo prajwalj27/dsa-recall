@@ -1,15 +1,13 @@
-from datetime import UTC, date, datetime, timedelta
-from itertools import count
+from datetime import date, timedelta
 
 import fsrs
 import pytest
 from fsrs import Rating
 from sqlalchemy import func, select
 
-from app.db.models import Card, Problem, ReviewLog, Solve, Submission
+from app.db.models import Card, ReviewLog, Solve
 from app.engines.reviews import (
     HISTORY,
-    INFERRED,
     USER,
     Choice,
     due_reviews,
@@ -23,48 +21,7 @@ from app.engines.reviews import (
 )
 from app.settings_store import set_study_mode
 from app.timeutil import as_utc, utc_naive
-
-T0 = datetime(2026, 1, 1, tzinfo=UTC)
-NOW = datetime(2026, 9, 30, tzinfo=UTC)
-_ids = count(1000)
-
-
-def at(days: float) -> datetime:
-    return T0 + timedelta(days=days)
-
-
-def add_problem(session, slug: str, difficulty: str = "Medium") -> None:
-    session.add(Problem(slug=slug, title=slug.replace("-", " ").title(), difficulty=difficulty))
-    session.flush()
-
-
-def add_solve(session, slug: str, when: datetime, wrong: int = 0, source: str = INFERRED) -> Solve:
-    submission = Submission(
-        submission_id=next(_ids),
-        slug=slug,
-        status="Accepted",
-        lang="python3",
-        timestamp=utc_naive(when),
-    )
-    session.add(submission)
-    session.flush()
-    solve = Solve(
-        slug=slug,
-        accepted_submission_id=submission.submission_id,
-        wrong_before_ac=wrong,
-        accepted_at=utc_naive(when),
-        rating_source=source,
-    )
-    session.add(solve)
-    session.flush()
-    return solve
-
-
-@pytest.fixture
-def session(session_factory):
-    with session_factory() as s, s.begin():
-        yield s
-
+from tests.factories import NOW, add_problem, add_solve, at
 
 # --- Ratings and replay ----------------------------------------------------------------
 
@@ -223,7 +180,7 @@ def test_mark_reviewed_requires_a_card(session) -> None:
 # --- Due queue ------------------------------------------------------------------------------
 
 
-def test_due_reviews_lowest_recall_first(session) -> None:
+def test_due_reviews_excludes_not_due_and_suspended(session) -> None:
     for slug in ("fresh", "old", "older", "not-due", "suspended"):
         add_problem(session, slug)
     add_solve(session, "fresh", NOW - timedelta(days=5))
@@ -236,8 +193,9 @@ def test_due_reviews_lowest_recall_first(session) -> None:
 
     items = due_reviews(session, NOW)
 
+    # All Medium, so priority order is lowest recall first.
     assert [i.slug for i in items] == ["older", "old", "fresh"]
     assert items[0].recall < items[1].recall < items[2].recall
-    assert items[0].days_overdue > items[2].days_overdue >= 0
+    assert items[0].priority > items[1].priority > items[2].priority
     assert as_utc(session.get(Card, "not-due").due) > NOW
     assert [i.slug for i in due_reviews(session, NOW, limit=1)] == ["older"]

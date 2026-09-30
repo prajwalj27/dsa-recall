@@ -21,6 +21,9 @@
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+    --color-easy: var(--easy);
+    --color-medium: var(--medium);
+    --color-hard: var(--hard);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -81,6 +84,9 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --easy: oklch(0.55 0.14 160);
+    --medium: oklch(0.62 0.15 70);
+    --hard: oklch(0.56 0.2 25);
 }
 
 .dark {
@@ -115,6 +121,9 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --easy: oklch(0.75 0.14 165);
+    --medium: oklch(0.8 0.15 80);
+    --hard: oklch(0.7 0.18 22);
 }
 
 @layer base {
